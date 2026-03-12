@@ -1,5 +1,3 @@
-import fetch from "node-fetch"
-
 export const getWhatsAppData = async (token) => {
 
     const headers = {
