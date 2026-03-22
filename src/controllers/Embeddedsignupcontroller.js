@@ -19,7 +19,7 @@ exports.embeddedSignupCallback = async (req, res, next) => {
                 client_id: process.env.META_APP_ID,
                 client_secret: process.env.META_APP_SECRET,
                 code,
-                redirect_uri: "",
+                redirect_uri: "https://watsapp-automotion.vercel.app/callback",
             },
         });
 
