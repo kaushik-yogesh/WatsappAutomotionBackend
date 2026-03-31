@@ -34,28 +34,74 @@ exports.embeddedSignupCallback = async (req, res, next) => {
                 client_id: process.env.META_APP_ID,
                 client_secret: process.env.META_APP_SECRET,
                 fb_exchange_token: shortLivedToken,
-                redirect_uri: "https://watsapp-automotion.vercel.app/callback"
             },
         });
 
         const longLivedToken = longLivedRes.data.access_token;
 
         // Get WABA and phone number info from the token
-        const wabaRes = await axios.get(`${META_API_BASE}/me/businesses`, {
+        // const wabaRes = await axios.get(`${META_API_BASE}/me/businesses`, {
+        //     params: {
+        //         access_token: longLivedToken,
+        //         fields: 'id,name,whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number,verified_name}}',
+        //     },
+        // });
+
+        // const businesses = wabaRes.data.data || [];
+        // const phoneNumbers = [];
+
+        // for (const biz of businesses) {
+        //     const wabas = biz.whatsapp_business_accounts?.data || [];
+        //     for (const waba of wabas) {
+        //         const phones = waba.phone_numbers?.data || [];
+        //         for (const phone of phones) {
+        //             phoneNumbers.push({
+        //                 phoneNumberId: phone.id,
+        //                 wabaId: waba.id,
+        //                 wabaName: waba.name,
+        //                 displayPhoneNumber: phone.display_phone_number,
+        //                 verifiedName: phone.verified_name,
+        //             });
+        //         }
+        //     }
+        // }
+
+
+        // Step 1: Get businesses
+        const bizRes = await axios.get(`${META_API_BASE}/me/businesses`, {
             params: {
                 access_token: longLivedToken,
-                fields: 'id,name,whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number,verified_name}}',
             },
         });
 
-        const businesses = wabaRes.data.data || [];
         const phoneNumbers = [];
 
-        for (const biz of businesses) {
-            const wabas = biz.whatsapp_business_accounts?.data || [];
-            for (const waba of wabas) {
-                const phones = waba.phone_numbers?.data || [];
-                for (const phone of phones) {
+        // Step 2: Loop businesses → WABA → phone numbers
+        for (const biz of bizRes.data.data || []) {
+
+            // Get WABA list
+            const wabaRes = await axios.get(
+                `${META_API_BASE}/${biz.id}/owned_whatsapp_business_accounts`,
+                {
+                    params: {
+                        access_token: longLivedToken,
+                    },
+                }
+            );
+
+            for (const waba of wabaRes.data.data || []) {
+
+                // Get phone numbers
+                const phoneRes = await axios.get(
+                    `${META_API_BASE}/${waba.id}/phone_numbers`,
+                    {
+                        params: {
+                            access_token: longLivedToken,
+                        },
+                    }
+                );
+
+                for (const phone of phoneRes.data.data || []) {
                     phoneNumbers.push({
                         phoneNumberId: phone.id,
                         wabaId: waba.id,
@@ -66,7 +112,6 @@ exports.embeddedSignupCallback = async (req, res, next) => {
                 }
             }
         }
-
         res.status(200).json({
             status: 'success',
             data: {
