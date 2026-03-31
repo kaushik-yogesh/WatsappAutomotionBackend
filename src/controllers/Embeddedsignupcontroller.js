@@ -21,6 +21,7 @@ exports.embeddedSignupCallback = async (req, res, next) => {
                 client_id: process.env.META_APP_ID,
                 client_secret: process.env.META_APP_SECRET,
                 code,
+                redirect_uri: "https://watsapp-automotion.vercel.app/callback"
             },
         });
 
@@ -33,6 +34,7 @@ exports.embeddedSignupCallback = async (req, res, next) => {
                 client_id: process.env.META_APP_ID,
                 client_secret: process.env.META_APP_SECRET,
                 fb_exchange_token: shortLivedToken,
+                redirect_uri: "https://watsapp-automotion.vercel.app/callback"
             },
         });
 
