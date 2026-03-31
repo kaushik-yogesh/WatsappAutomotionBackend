@@ -113,10 +113,12 @@ exports.embeddedSignupCallback = async (req, res, next) => {
             }
         }
 
+        const selected = phoneNumbers[0];
 
         try {
-            const { phoneNumberId, wabaId, accessToken, displayPhoneNumber, verifiedName } = phoneNumbers;
-
+            const { phoneNumberId, wabaId, displayPhoneNumber, verifiedName } = selected;
+            const accessToken = longLivedToken;
+            
             if (!phoneNumberId || !wabaId || !accessToken) {
                 return next(new AppError('phoneNumberId, wabaId, and accessToken are required.', 400));
             }
@@ -183,14 +185,6 @@ exports.embeddedSignupCallback = async (req, res, next) => {
             next(err);
         }
 
-
-        res.status(200).json({
-            status: 'success',
-            data: {
-                longLivedToken,
-                phoneNumbers,
-            },
-        });
     } catch (err) {
         const metaErr = err.response?.data?.error;
         logger.error('Embedded signup token exchange error:', metaErr || err.message);
