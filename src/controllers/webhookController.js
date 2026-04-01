@@ -130,13 +130,13 @@ exports.receiveMessage = async (req, res) => {
       .map((m) => ({ role: m.role, content: m.content }));
 
     // 9. Generate AI response
-    const aiResult ="df"|| await AIService.generate(agent, contextMessages.slice(0, -1), text);
+    const aiResult = await AIService.generate(agent, contextMessages.slice(0, -1), text);
   
     // 10. Mark incoming as read
     const waService = new WhatsAppService(decrypt(waAccount.accessToken), phoneNumberId);
     await waService.markAsRead(messageId);
     // 11. Send AI reply
-    const sentMsg = await waService.sendTextMessage(from, aiResult.content||"this is aii reply");
+    const sentMsg = await waService.sendTextMessage(from, aiResult.content||"this is new AI reply");
 
     // 12. Save assistant message
     conversation.messages.push({
