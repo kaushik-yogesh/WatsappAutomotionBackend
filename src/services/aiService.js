@@ -125,12 +125,20 @@ class AIService {
         });
       }
 
-      return this.generateOpenAI({
-        model: agent.model || 'gpt-4o',
+      // 2️⃣ For testing → OpenRouter
+      return await this.generateOpenRouter({
+        model: 'openai/gpt-4o-mini',
         messages,
         temperature: agent.temperature,
         maxTokens: agent.maxTokens,
       });
+
+      // return this.generateOpenAI({
+      //   model: agent.model || 'gpt-4o',
+      //   messages,
+      //   temperature: agent.temperature,
+      //   maxTokens: agent.maxTokens,
+      // });
     } catch (error) {
       logger.error('Primary failed:', err.message);
 
