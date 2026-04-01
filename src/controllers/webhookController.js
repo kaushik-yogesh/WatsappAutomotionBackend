@@ -52,7 +52,7 @@ exports.receiveMessage = async (req, res) => {
       logger.warn(`No active WA account for phoneNumberId: ${phoneNumberId}`);
       return;
     }
-    console.log("okk1")
+    
     // 2. Find active agent for this account
     const agent = await Agent.findOne({
       whatsappAccount: waAccount._id,
@@ -69,7 +69,7 @@ exports.receiveMessage = async (req, res) => {
       customerPhone: from,
       status: { $in: ['active', 'waiting'] },
     });
-    console.log("okk2")
+    
 
     if (!conversation) {
       conversation = await Conversation.create({

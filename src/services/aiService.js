@@ -8,6 +8,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const OPENAI_MODELS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
 const ANTHROPIC_MODELS = ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'];
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 class AIService {
   // Build messages array from conversation history
@@ -78,25 +79,71 @@ class AIService {
     }
   }
 
+  static async generateOpenRouter({ model = 'openai/gpt-4o-mini', messages, temperature = 0.7, maxTokens = 500 }) {
+    try {
+      const start = Date.now();
+
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature,
+          max_tokens: maxTokens,
+        }),
+      });
+
+      const data = await response.json();
+
+      const responseTime = Date.now() - start;
+      const content = data.choices?.[0]?.message?.content?.trim();
+      const tokensUsed = data.usage?.total_tokens || 0;
+
+      return { content, tokensUsed, responseTime, model };
+
+    } catch (err) {
+      logger.error('OpenRouter error:', err.message);
+      throw new AppError('AI response generation failed.', 502);
+    }
+  }
+
   // Main generate function - routes to correct provider
   static async generate(agent, conversationHistory, userMessage) {
     const messages = this.buildMessages(agent.systemPrompt, conversationHistory, userMessage);
 
-    if (agent.aiProvider === 'anthropic') {
-      return this.generateAnthropic({
-        model: agent.model || 'claude-sonnet-4-6',
+    try {
+      if (agent.aiProvider === 'anthropic') {
+        return this.generateAnthropic({
+          model: agent.model || 'claude-sonnet-4-6',
+          messages,
+          temperature: agent.temperature,
+          maxTokens: agent.maxTokens,
+        });
+      }
+
+      return this.generateOpenAI({
+        model: agent.model || 'gpt-4o',
+        messages,
+        temperature: agent.temperature,
+        maxTokens: agent.maxTokens,
+      });
+    } catch (error) {
+      logger.error('Primary failed:', err.message);
+
+      // 2️⃣ ONLY fallback → OpenRouter
+      return await this.generateOpenRouter({
+        model: 'openai/gpt-4o-mini',
         messages,
         temperature: agent.temperature,
         maxTokens: agent.maxTokens,
       });
     }
 
-    return this.generateOpenAI({
-      model: agent.model || 'gpt-4o',
-      messages,
-      temperature: agent.temperature,
-      maxTokens: agent.maxTokens,
-    });
+
   }
 
   // Check if message contains human handoff keywords
