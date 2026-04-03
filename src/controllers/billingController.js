@@ -12,7 +12,7 @@ const razorpay = new Razorpay({
 });
 
 const PLANS = {
-  starter:    { amount: 49900,  label: 'Starter',    messages: 1000,  agents: 3  },
+  starter:    { amount: 1000,  label: 'Starter',    messages: 1000,  agents: 3  },
   pro:        { amount: 149900, label: 'Pro',         messages: 5000,  agents: 10 },
   enterprise: { amount: 499900, label: 'Enterprise',  messages: 50000, agents: 50 },
 };
