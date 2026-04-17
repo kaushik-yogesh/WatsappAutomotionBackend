@@ -27,10 +27,13 @@ app.set('trust proxy', 1);
 // ─── Security Middleware ──────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
-})); 
-  
+}));
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: [
+    process.env.FRONTEND_URL || 'http://localhost:3000',
+    'https://automation.poojatrendhub.com'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -110,6 +113,6 @@ process.on('unhandledRejection', (err) => {
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received. Shutting down gracefully...');
   server.close(() => logger.info('Process terminated.'));
-}); 
+});
 
 module.exports = app;
