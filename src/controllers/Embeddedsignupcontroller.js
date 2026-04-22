@@ -12,8 +12,10 @@ const META_API_BASE = `https://graph.facebook.com/${process.env.META_API_VERSION
 
 exports.embeddedSignupCallback = async (req, res, next) => {
     try {
-        const { code } = req.body;
+        const { code, redirectUri } = req.body;
         if (!code) return next(new AppError('Authorization code is required.', 400));
+
+        const redirect_uri = redirectUri || "https://watsapp-automotion.vercel.app/callback";
 
         // Exchange code for access token
         const tokenRes = await axios.get(`${META_API_BASE}/oauth/access_token`, {
@@ -21,7 +23,7 @@ exports.embeddedSignupCallback = async (req, res, next) => {
                 client_id: process.env.META_APP_ID,
                 client_secret: process.env.META_APP_SECRET,
                 code,
-                redirect_uri: "https://watsapp-automotion.vercel.app/callback"
+                redirect_uri
             },
         });
 
@@ -39,34 +41,6 @@ exports.embeddedSignupCallback = async (req, res, next) => {
 
         const longLivedToken = longLivedRes.data.access_token;
 
-        // Get WABA and phone number info from the token
-        // const wabaRes = await axios.get(`${META_API_BASE}/me/businesses`, {
-        //     params: {
-        //         access_token: longLivedToken,
-        //         fields: 'id,name,whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number,verified_name}}',
-        //     },
-        // });
-
-        // const businesses = wabaRes.data.data || [];
-        // const phoneNumbers = [];
-
-        // for (const biz of businesses) {
-        //     const wabas = biz.whatsapp_business_accounts?.data || [];
-        //     for (const waba of wabas) {
-        //         const phones = waba.phone_numbers?.data || [];
-        //         for (const phone of phones) {
-        //             phoneNumbers.push({
-        //                 phoneNumberId: phone.id,
-        //                 wabaId: waba.id,
-        //                 wabaName: waba.name,
-        //                 displayPhoneNumber: phone.display_phone_number,
-        //                 verifiedName: phone.verified_name,
-        //             });
-        //         }
-        //     }
-        // }
-
-
         // Step 1: Get businesses
         const bizRes = await axios.get(`${META_API_BASE}/me/businesses`, {
             params: {
@@ -78,7 +52,6 @@ exports.embeddedSignupCallback = async (req, res, next) => {
 
         // Step 2: Loop businesses → WABA → phone numbers
         for (const biz of bizRes.data.data || []) {
-
             // Get WABA list
             const wabaRes = await axios.get(
                 `${META_API_BASE}/${biz.id}/owned_whatsapp_business_accounts`,
@@ -90,7 +63,6 @@ exports.embeddedSignupCallback = async (req, res, next) => {
             );
 
             for (const waba of wabaRes.data.data || []) {
-
                 // Get phone numbers
                 const phoneRes = await axios.get(
                     `${META_API_BASE}/${waba.id}/phone_numbers`,
@@ -113,77 +85,10 @@ exports.embeddedSignupCallback = async (req, res, next) => {
             }
         }
 
-        const selected = phoneNumbers[0];
-
-        try {
-            const { phoneNumberId, wabaId, displayPhoneNumber, verifiedName } = selected;
-            const accessToken = longLivedToken;
-            
-            if (!phoneNumberId || !wabaId || !accessToken) {
-                return next(new AppError('phoneNumberId, wabaId, and accessToken are required.', 400));
-            }
-
-            // Check duplicate
-            const existing = await WhatsappAccount.findOne({ phoneNumberId });
-            if (existing && existing.user.toString() !== req.user._id.toString()) {
-                return next(new AppError('This number is already connected to another account.', 400));
-            }
-
-            // Check plan limit
-            const count = await WhatsappAccount.countDocuments({
-                user: req.user._id,
-                isActive: true,
-                ...(existing ? { _id: { $ne: existing._id } } : {}),
-            });
-            const limits = req.user.getPlanLimits();
-            if (!existing && count >= limits.agents) {
-                return next(new AppError(`Your plan allows only ${limits.agents} number(s). Please upgrade.`, 403));
-            }
-
-            // Subscribe to webhook for this WABA (register webhook on Meta side)
-            try {
-                await axios.post(
-                    `${META_API_BASE}/${wabaId}/subscribed_apps`,
-                    {},
-                    { params: { access_token: accessToken } }
-                );
-                logger.info(`Webhook subscribed for WABA: ${wabaId}`);
-            } catch (subErr) {
-                logger.warn('Webhook subscription warning:', subErr.response?.data?.error?.message);
-            }
-
-            const account = await WhatsappAccount.findOneAndUpdate(
-                { phoneNumberId },
-                {
-                    user: req.user._id,
-                    phoneNumberId,
-                    wabaId,
-                    accessToken: encrypt(accessToken),
-                    displayPhoneNumber,
-                    verifiedName,
-                    status: 'connected',
-                    lastVerified: new Date(),
-                    webhookVerified: true,
-                    isActive: true,
-                    errorMessage: undefined,
-                },
-                { upsert: true, new: true, setDefaultsOnInsert: true }
-            );
-
-            const accountObj = account.toObject();
-            delete accountObj.accessToken;
-
-            logger.info(`Account connected via Embedded Signup: ${displayPhoneNumber} for user ${req.user._id}`);
-
-            res.status(201).json({
-                status: 'success',
-                message: `${displayPhoneNumber} connected successfully!`,
-                data: { account: accountObj },
-            });
-        } catch (err) {
-            logger.error('Embedded signup save error:', err);
-            next(err);
-        }
+        res.status(200).json({
+            status: 'success',
+            data: { phoneNumbers, longLivedToken },
+        });
 
     } catch (err) {
         const metaErr = err.response?.data?.error;
