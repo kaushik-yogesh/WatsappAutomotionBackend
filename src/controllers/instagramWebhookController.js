@@ -7,9 +7,9 @@ const User = require('../models/User');
 const logger = require('../utils/logger');
 
 exports.verifyWebhook = (req, res) => {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+  const mode = req.query['hub.mode'] || req.query['hub_mode'];
+  const token = req.query['hub.verify_token'] || req.query['hub_verify_token'];
+  const challenge = req.query['hub.challenge'] || req.query['hub_challenge'];
 
   if (mode && token) {
     if (mode === 'subscribe' && token === process.env.META_VERIFY_TOKEN) {
