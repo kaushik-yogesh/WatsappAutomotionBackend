@@ -57,7 +57,7 @@ const authLimiter = rateLimit({
   message: { status: 'error', message: 'Too many auth attempts. Please try after 15 minutes.' },
 });
 
-
+ 
 app.use('/api', globalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
