@@ -18,6 +18,8 @@ const whatsappRoutes = require('./routes/whatsapp');
 const agentRoutes = require('./routes/agents');
 const conversationRoutes = require('./routes/conversations');
 const billingRoutes = require('./routes/billing');
+const telegramRoutes = require('./routes/telegramRoutes');
+const telegramWebhookRoutes = require('./routes/telegramWebhookRoutes');
 
 const app = express();
 
@@ -86,6 +88,8 @@ app.get('/health', (req, res) => {
 // ─── API Routes ───────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/telegram', telegramRoutes);
+app.use('/api/telegram/webhook', telegramWebhookRoutes);
 app.use('/api/agents', agentRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/billing', billingRoutes);

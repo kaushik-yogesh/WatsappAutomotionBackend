@@ -41,16 +41,25 @@ const conversationSchema = new mongoose.Schema({
   whatsappAccount: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'WhatsappAccount',
-    required: true,
+  },
+  telegramAccount: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TelegramAccount',
+  },
+  platform: {
+    type: String,
+    enum: ['whatsapp', 'telegram'],
+    default: 'whatsapp',
   },
 
   // Customer info
   customerPhone: {
     type: String,
-    required: true,
   },
+  customerUsername: String,
   customerName: String,
   customerWaId: String,
+  customerTgId: String,
 
   messages: [messageSchema],
 

@@ -9,7 +9,15 @@ const agentSchema = new mongoose.Schema({
   whatsappAccount: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'WhatsappAccount',
-    required: true,
+  },
+  telegramAccount: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TelegramAccount',
+  },
+  platform: {
+    type: String,
+    enum: ['whatsapp', 'telegram', 'both'],
+    default: 'whatsapp',
   },
 
   // Agent identity
