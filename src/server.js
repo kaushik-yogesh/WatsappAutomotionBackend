@@ -20,6 +20,8 @@ const conversationRoutes = require('./routes/conversations');
 const billingRoutes = require('./routes/billing');
 const telegramRoutes = require('./routes/telegramRoutes');
 const telegramWebhookRoutes = require('./routes/telegramWebhookRoutes');
+const instagramRoutes = require('./routes/instagramRoutes');
+const instagramWebhookRoutes = require('./routes/instagramWebhookRoutes');
 
 const app = express();
 
@@ -90,6 +92,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/telegram/webhook', telegramWebhookRoutes);
 app.use('/api/telegram', telegramRoutes);
+app.use('/api/instagram/webhook', instagramWebhookRoutes);
+app.use('/api/instagram', instagramRoutes);
 app.use('/api/agents', agentRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/billing', billingRoutes);

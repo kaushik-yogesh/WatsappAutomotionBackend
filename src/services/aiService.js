@@ -13,8 +13,10 @@ const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 class AIService {
   // Build messages array from conversation history
   static buildMessages(systemPrompt, conversationHistory, newUserMessage) {
+    const tokenSavingInstruction = "\n\nIMPORTANT: Keep your responses as short and concise as possible. Provide necessary details but use minimal words to save tokens. Avoid long paragraphs. For social media platforms like Instagram/WhatsApp, short responses work best.";
+    
     const messages = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: systemPrompt + tokenSavingInstruction },
       ...conversationHistory.map((m) => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: m.content,

@@ -46,9 +46,13 @@ const conversationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'TelegramAccount',
   },
+  instagramAccount: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'InstagramAccount',
+  },
   platform: {
     type: String,
-    enum: ['whatsapp', 'telegram'],
+    enum: ['whatsapp', 'telegram', 'instagram'],
     default: 'whatsapp',
   },
 
@@ -60,6 +64,7 @@ const conversationSchema = new mongoose.Schema({
   customerName: String,
   customerWaId: String,
   customerTgId: String,
+  customerIgId: String,
 
   messages: [messageSchema],
 
