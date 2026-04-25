@@ -26,6 +26,8 @@ exports.receiveMessage = async (req, res) => {
 
   try {
     const { body } = req;
+    logger.info(body);
+
     if (body.object !== 'instagram') return;
 
     for (const entry of body.entry) {
@@ -211,7 +213,7 @@ async function handleInstagramComment(commentData, igAccount, agent) {
   // We mock a conversation history for comments to keep it stateless but context-aware
   const contextMessages = [];
   const systemPrompt = agent.systemPrompt + "\n\nYou are replying to a public Instagram comment. Keep your reply extremely short, friendly, and under 2 sentences. Encourage them to DM for details.";
-  
+
   const tempAgent = { ...agent.toObject(), systemPrompt };
   const aiResult = await AIService.generate(tempAgent, contextMessages, text);
 
