@@ -6,6 +6,7 @@ const axios = require('axios');
 exports.connectAccount = async (req, res, next) => {
   try {
     const { igAccountId, pageId, pageAccessToken, igUsername } = req.body;
+    const apiVersion = process.env.META_API_VERSION || 'v19.0';
 
     if (!igAccountId || !pageId || !pageAccessToken) {
       return next(new AppError('igAccountId, pageId, and pageAccessToken are required', 400));
@@ -13,7 +14,6 @@ exports.connectAccount = async (req, res, next) => {
 
     // Verify token by making a dummy request to Graph API
     try {
-      const apiVersion = process.env.META_API_VERSION || 'v19.0';
       await axios.get(`https://graph.facebook.com/${apiVersion}/${igAccountId}`, {
         params: { access_token: pageAccessToken }
       });
@@ -38,7 +38,7 @@ exports.connectAccount = async (req, res, next) => {
     try {
       await axios.post(`https://graph.facebook.com/${apiVersion}/${pageId}/subscribed_apps`, null, {
         params: {
-          subscribed_fields: 'feed',
+          subscribed_fields: 'messages,messaging_postbacks',
           access_token: pageAccessToken
         }
       });
@@ -127,7 +127,7 @@ exports.autoConnect = async (req, res, next) => {
           try {
             await axios.post(`https://graph.facebook.com/${apiVersion}/${page.id}/subscribed_apps`, null, {
               params: {
-                subscribed_fields: 'feed',
+                subscribed_fields: 'messages,messaging_postbacks',
                 access_token: page.access_token
               }
             });
