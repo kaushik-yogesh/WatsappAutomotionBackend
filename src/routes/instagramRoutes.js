@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(protect);
 
 router.post('/connect', instagramController.connectAccount);
+router.post('/auto-connect', instagramController.autoConnect);
 router.get('/', instagramController.getAllAccounts);
 router.delete('/:id', instagramController.disconnectAccount);
 
