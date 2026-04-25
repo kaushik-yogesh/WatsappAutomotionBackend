@@ -43,6 +43,24 @@ class InstagramService {
       throw error;
     }
   }
+
+  async resolveMessageSender(messageId) {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/${messageId}`,
+        {
+          params: {
+            fields: 'from,to,message',
+            access_token: this.accessToken,
+          },
+        }
+      );
+      return response.data;
+    } catch (error) {
+      logger.error('Instagram resolveMessageSender error:', error.response?.data || error.message);
+      return null;
+    }
+  }
 }
 
 module.exports = InstagramService;

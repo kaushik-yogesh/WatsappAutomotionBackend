@@ -232,6 +232,7 @@ async function handleInstagramComment(commentData, igAccount, agent) {
 async function handleInstagramMessageEdit(event, igAccount, agent) {
   const editedMid = event?.message_edit?.mid;
   const numEdit = event?.message_edit?.num_edit;
+  const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
 
   if (!editedMid) {
     logger.info('Skipping message_edit event due to missing mid');
@@ -253,6 +254,16 @@ async function handleInstagramMessageEdit(event, igAccount, agent) {
     senderId = conversation?.customerIgId || null;
   }
 
+  // Fallback: resolve sender directly from Graph API using edited message id
+  if (!senderId) {
+    const messageMeta = await igService.resolveMessageSender(editedMid);
+    const metaSenderId = messageMeta?.from?.id || null;
+    if (metaSenderId && metaSenderId !== igAccount.igAccountId) {
+      senderId = metaSenderId;
+      logger.info(`Resolved sender from Graph API for message_edit (mid=${editedMid}, sender=${senderId})`);
+    }
+  }
+
   if (!senderId) {
     logger.warn(`message_edit received but sender could not be resolved (mid=${editedMid})`);
     return;
@@ -260,7 +271,6 @@ async function handleInstagramMessageEdit(event, igAccount, agent) {
 
   const replyText = 'Maine aapka edited message dekha. Please updated message dobara bhej do, main turant reply karta hoon.';
 
-  const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
   const sentMsg = await igService.sendTextMessage(igAccount.igAccountId, senderId, replyText);
 
   // Save assistant reply in existing conversation if available (or resolve once by sender)
