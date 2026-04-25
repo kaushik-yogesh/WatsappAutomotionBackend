@@ -64,6 +64,10 @@ exports.receiveMessage = async (req, res) => {
         for (const event of messaging) {
           if (event.message && !event.message.is_echo) {
             await handleInstagramDM(event, igAccount, agent);
+          } else if (event.message_edit) {
+            logger.info(`Skipping Instagram message_edit event (mid=${event.message_edit?.mid || 'n/a'})`);
+          } else {
+            logger.info(`Skipping unsupported Instagram messaging event: ${JSON.stringify(event)}`);
           }
         }
       }
@@ -74,6 +78,13 @@ exports.receiveMessage = async (req, res) => {
           if (change.field === 'comments' && change.value) {
             logger.info(`Received Instagram comment from ${change.value.from?.username || change.value.from?.id}`);
             await handleInstagramComment(change.value, igAccount, agent);
+          } else if (change.field === 'messages' && change.value) {
+            const dmEvent = normalizeInstagramChangeMessage(change.value);
+            if (dmEvent) {
+              await handleInstagramDM(dmEvent, igAccount, agent);
+            } else {
+              logger.info(`Skipping unsupported Instagram changes.messages payload: ${JSON.stringify(change.value)}`);
+            }
           }
         }
       }
@@ -84,13 +95,16 @@ exports.receiveMessage = async (req, res) => {
 };
 
 async function handleInstagramDM(event, igAccount, agent) {
-  const senderId = event.sender.id;
-  const messageId = event.message.mid;
-  const text = event.message.text;
+  const senderId = event?.sender?.id;
+  const messageId = event?.message?.mid;
+  const text = event?.message?.text;
 
   logger.info(`Received Instagram DM from ${senderId}`);
 
-  if (!text) return;
+  if (!senderId || !messageId || !text) {
+    logger.info(`Skipping DM event due to missing fields (senderId=${senderId || 'n/a'}, mid=${messageId || 'n/a'}, text=${text ? 'yes' : 'no'})`);
+    return;
+  }
 
   // Ignore messages sent by the page/account itself
   if (senderId === igAccount.igAccountId) {
@@ -161,6 +175,24 @@ async function handleInstagramDM(event, igAccount, agent) {
   await Agent.findByIdAndUpdate(agent._id, {
     $inc: { 'stats.totalMessages': 2, 'stats.totalConversations': conversation.totalMessages === 2 ? 1 : 0 },
   });
+}
+
+function normalizeInstagramChangeMessage(value) {
+  const senderId = value?.from?.id || value?.sender?.id;
+  const messageId = value?.message?.mid || value?.mid;
+  const text = value?.message?.text || value?.text;
+  const isEcho = value?.message?.is_echo || false;
+
+  if (!senderId || !messageId || !text) return null;
+
+  return {
+    sender: { id: senderId },
+    message: {
+      mid: messageId,
+      text,
+      is_echo: isEcho,
+    },
+  };
 }
 
 async function handleInstagramComment(commentData, igAccount, agent) {
