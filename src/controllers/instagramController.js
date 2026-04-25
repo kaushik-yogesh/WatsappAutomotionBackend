@@ -34,9 +34,22 @@ exports.connectAccount = async (req, res, next) => {
       { new: true, upsert: true }
     );
 
+    // Automatically subscribe the page to the app's webhooks
+    try {
+      await axios.post(`https://graph.facebook.com/${apiVersion}/${pageId}/subscribed_apps`, null, {
+        params: {
+          subscribed_fields: 'messages,comments',
+          access_token: pageAccessToken
+        }
+      });
+      logger.info(`Successfully subscribed page ${pageId} to webhooks.`);
+    } catch (err) {
+      logger.warn(`Failed to auto-subscribe page ${pageId} to webhooks. You may need to do it manually in the Meta App Dashboard.`);
+    }
+
     res.status(200).json({
       status: 'success',
-      message: 'Instagram account connected successfully. Ensure your Meta App Webhook is subscribed to "messages" and "comments" fields for this page.',
+      message: 'Instagram account connected successfully and page subscribed to webhooks.',
       data: { account },
     });
   } catch (err) {
@@ -109,6 +122,19 @@ exports.autoConnect = async (req, res, next) => {
           );
           
           connectedAccounts.push(account);
+
+          // Automatically subscribe the page to the app's webhooks
+          try {
+            await axios.post(`https://graph.facebook.com/${apiVersion}/${page.id}/subscribed_apps`, null, {
+              params: {
+                subscribed_fields: 'messages,comments',
+                access_token: page.access_token
+              }
+            });
+            logger.info(`Successfully subscribed page ${page.id} to webhooks.`);
+          } catch (err) {
+            logger.warn(`Failed to auto-subscribe page ${page.id} to webhooks. Error: ${err.response?.data?.error?.message || err.message}`);
+          }
         }
       } catch (err) {
         logger.error(`Error processing page ${page.id}: ${err.message}`);

@@ -63,13 +63,14 @@ exports.receiveMessage = async (req, res) => {
       if (changes) {
         for (const change of changes) {
           if (change.field === 'comments' && change.value) {
+            logger.info(`Received Instagram comment from ${change.value.from?.username || change.value.from?.id}`);
             await handleInstagramComment(change.value, igAccount, agent);
           }
         }
       }
     }
   } catch (err) {
-    logger.error('Instagram Webhook processing error:', err.message);
+    logger.error(`Instagram Webhook processing error: ${err.message}`);
   }
 };
 
@@ -78,7 +79,15 @@ async function handleInstagramDM(event, igAccount, agent) {
   const messageId = event.message.mid;
   const text = event.message.text;
 
+  logger.info(`Received Instagram DM from ${senderId}`);
+
   if (!text) return;
+
+  // Ignore messages sent by the page/account itself
+  if (senderId === igAccount.igAccountId) {
+    logger.info(`Ignored self-DM by the connected account.`);
+    return;
+  }
 
   // Find or create conversation
   let conversation = await Conversation.findOne({
@@ -147,7 +156,10 @@ async function handleInstagramDM(event, igAccount, agent) {
 
 async function handleInstagramComment(commentData, igAccount, agent) {
   // Ignore comments made by the page/account itself
-  if (commentData.from.id === igAccount.igAccountId) return;
+  if (commentData.from.id === igAccount.igAccountId) {
+    logger.info(`Ignored self-comment by the connected account (${igAccount.igUsername || igAccount.igAccountId})`);
+    return;
+  }
 
   const text = commentData.text;
   const commentId = commentData.id;
