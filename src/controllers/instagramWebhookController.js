@@ -67,7 +67,7 @@ exports.receiveMessage = async (req, res) => {
           if (event.message && !event.message.is_echo) {
             await handleInstagramDM(event, igAccount, agent);
           } else if (event.message_edit) {
-            logger.info(`Skipping Instagram message_edit event (mid=${event.message_edit?.mid || 'n/a'})`);
+            await handleInstagramMessageEdit(event, igAccount, agent);
           } else {
             logger.info(`Skipping unsupported Instagram messaging event: ${JSON.stringify(event)}`);
           }
@@ -224,6 +224,69 @@ async function handleInstagramComment(commentData, igAccount, agent) {
   await User.findByIdAndUpdate(igAccount.user, {
     $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1 },
   });
+  await Agent.findByIdAndUpdate(agent._id, {
+    $inc: { 'stats.totalMessages': 1 },
+  });
+}
+
+async function handleInstagramMessageEdit(event, igAccount, agent) {
+  const editedMid = event?.message_edit?.mid;
+  const numEdit = event?.message_edit?.num_edit;
+
+  if (!editedMid) {
+    logger.info('Skipping message_edit event due to missing mid');
+    return;
+  }
+
+  // Try to resolve sender using webhook payload first, then from saved conversation by message id
+  let senderId = event?.sender?.id || event?.from?.id || null;
+  let conversation = null;
+
+  if (!senderId) {
+    conversation = await Conversation.findOne({
+      instagramAccount: igAccount._id,
+      customerIgId: { $exists: true, $ne: null },
+      'messages.waMessageId': editedMid,
+      status: { $in: ['active', 'waiting'] },
+    }).sort('-updatedAt');
+
+    senderId = conversation?.customerIgId || null;
+  }
+
+  if (!senderId) {
+    logger.warn(`message_edit received but sender could not be resolved (mid=${editedMid})`);
+    return;
+  }
+
+  const replyText = 'Maine aapka edited message dekha. Please updated message dobara bhej do, main turant reply karta hoon.';
+
+  const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
+  const sentMsg = await igService.sendTextMessage(igAccount.igAccountId, senderId, replyText);
+
+  // Save assistant reply in existing conversation if available (or resolve once by sender)
+  if (!conversation) {
+    conversation = await Conversation.findOne({
+      instagramAccount: igAccount._id,
+      customerIgId: senderId,
+      status: { $in: ['active', 'waiting'] },
+    }).sort('-updatedAt');
+  }
+
+  if (conversation) {
+    conversation.messages.push({
+      role: 'assistant',
+      content: replyText,
+      waMessageId: sentMsg.message_id,
+      type: 'text',
+      status: 'sent',
+    });
+    conversation.totalMessages += 1;
+    conversation.lastMessageAt = new Date();
+    await conversation.save();
+  }
+
+  logger.info(`Handled Instagram message_edit event (mid=${editedMid}, num_edit=${numEdit ?? 'n/a'})`);
+
   await Agent.findByIdAndUpdate(agent._id, {
     $inc: { 'stats.totalMessages': 1 },
   });
