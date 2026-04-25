@@ -34,6 +34,7 @@ exports.receiveMessage = async (req, res) => {
       const messaging = entry.messaging; // For DMs
 
       logger.info(`Processing Instagram webhook entry for ID: ${igAccountId}`);
+      logger.info(`Webhook entry payload: ${JSON.stringify(entry)}`);
 
       // 1. Find Instagram account
       const igAccount = await InstagramAccount.findOne({

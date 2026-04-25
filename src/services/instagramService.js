@@ -11,10 +11,11 @@ class InstagramService {
 
   async sendTextMessage(igAccountId, recipientId, text) {
     try {
-      const endpointId = this.pageId || 'me';
+      const endpointId = igAccountId || this.pageId || 'me';
       const response = await axios.post(
         `${this.baseUrl}/${endpointId}/messages`,
         {
+          messaging_type: 'RESPONSE',
           recipient: { id: recipientId },
           message: { text },
         },
