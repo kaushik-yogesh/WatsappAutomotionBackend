@@ -2,16 +2,18 @@ const axios = require('axios');
 const logger = require('../utils/logger');
 
 class InstagramService {
-  constructor(pageAccessToken) {
+  constructor(pageAccessToken, pageId) {
     this.accessToken = pageAccessToken;
+    this.pageId = pageId;
     this.apiVersion = process.env.META_API_VERSION || 'v19.0';
     this.baseUrl = `https://graph.facebook.com/${this.apiVersion}`;
   }
 
   async sendTextMessage(igAccountId, recipientId, text) {
     try {
+      const endpointId = this.pageId || 'me';
       const response = await axios.post(
-        `${this.baseUrl}/${igAccountId}/messages`,
+        `${this.baseUrl}/${endpointId}/messages`,
         {
           recipient: { id: recipientId },
           message: { text },

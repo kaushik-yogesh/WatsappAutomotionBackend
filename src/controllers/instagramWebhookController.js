@@ -33,14 +33,19 @@ exports.receiveMessage = async (req, res) => {
       const changes = entry.changes; // For comments
       const messaging = entry.messaging; // For DMs
 
+      logger.info(`Processing Instagram webhook entry for ID: ${igAccountId}`);
+
       // 1. Find Instagram account
       const igAccount = await InstagramAccount.findOne({
         igAccountId,
         status: 'connected',
         isActive: true,
-      }).select('+pageAccessToken');
+      }).select('+pageAccessToken +pageId');
 
-      if (!igAccount) continue;
+      if (!igAccount) {
+        logger.warn(`Instagram account not found in DB or disconnected for ID: ${igAccountId}`);
+        continue;
+      }
 
       // 2. Find active agent
       const agent = await Agent.findOne({
@@ -48,7 +53,10 @@ exports.receiveMessage = async (req, res) => {
         isActive: true,
       });
 
-      if (!agent) continue;
+      if (!agent) {
+        logger.warn(`No active agent found for Instagram account ID: ${igAccountId}`);
+        continue;
+      }
 
       // 3. Process DMs
       if (messaging) {
@@ -128,7 +136,7 @@ async function handleInstagramDM(event, igAccount, agent) {
 
   const aiResult = await AIService.generate(agent, contextMessages.slice(0, -1), text);
 
-  const igService = new InstagramService(igAccount.pageAccessToken);
+  const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
   const sentMsg = await igService.sendTextMessage(igAccount.igAccountId, senderId, aiResult.content);
 
   conversation.messages.push({
@@ -174,7 +182,7 @@ async function handleInstagramComment(commentData, igAccount, agent) {
   const tempAgent = { ...agent.toObject(), systemPrompt };
   const aiResult = await AIService.generate(tempAgent, contextMessages, text);
 
-  const igService = new InstagramService(igAccount.pageAccessToken);
+  const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
   await igService.replyToComment(igAccount.igAccountId, commentId, aiResult.content);
 
   // We don't save comments in Conversations model to save DB space, but we bill the token usage
