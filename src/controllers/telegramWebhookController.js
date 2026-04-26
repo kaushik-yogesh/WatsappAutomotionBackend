@@ -101,7 +101,24 @@ exports.receiveMessage = async (req, res) => {
     // 5. Check human handoff keywords
     if (AIService.shouldHandoffToHuman(text, agent.humanHandoffKeywords)) {
       conversation.status = 'human_handoff';
+      conversation.messages.push({
+        role: 'user',
+        content: text,
+        waMessageId: messageId.toString(),
+        type: 'text',
+        timestamp: new Date(timestamp * 1000),
+      });
+      conversation.messages.push({
+        role: 'system',
+        content: 'System: 🔴 HUMAN HANDOFF REQUESTED. Email notification sent to admin.',
+        timestamp: new Date(),
+      });
+      conversation.lastMessageAt = new Date();
+      conversation.isRead = false;
       await conversation.save();
+      
+      logger.info(`[EMAIL ALERT] Human handoff triggered for TG conversation: ${conversation._id}`);
+
       const tgService = new TelegramService(tgAccount.botToken);
       await tgService.sendTextMessage(chatId, agent.humanHandoffMessage);
       return;

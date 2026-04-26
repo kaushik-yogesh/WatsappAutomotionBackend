@@ -121,7 +121,25 @@ exports.receiveMessage = async (req, res) => {
     // 5. Check human handoff keywords
     if (AIService.shouldHandoffToHuman(text, agent.humanHandoffKeywords)) {
       conversation.status = 'human_handoff';
+      conversation.messages.push({
+        role: 'user',
+        content: text,
+        waMessageId: messageId,
+        type: 'text',
+        timestamp: new Date(parseInt(timestamp) * 1000),
+      });
+      conversation.messages.push({
+        role: 'system',
+        content: 'System: 🔴 HUMAN HANDOFF REQUESTED. Email notification sent to admin.',
+        timestamp: new Date(),
+      });
+      conversation.lastMessageAt = new Date();
+      conversation.isRead = false;
       await conversation.save();
+      
+      // Mock email alert
+      logger.info(`[EMAIL ALERT] Human handoff triggered for WA conversation: ${conversation._id}`);
+
       const waService = new WhatsAppService(decrypt(waAccount.accessToken), phoneNumberId);
       await waService.sendTextMessage(from, agent.humanHandoffMessage);
       return;

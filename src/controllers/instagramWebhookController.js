@@ -121,12 +121,18 @@ async function handleInstagramDM(event, igAccount, agent) {
   }).sort({ createdAt: -1 });
 
   if (!conversation) {
+    const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
+    const profile = await igService.getCustomerProfile(senderId);
+    const customerName = profile?.name || profile?.username || '';
+    
     conversation = await Conversation.create({
       user: igAccount.user,
       agent: agent._id,
       instagramAccount: igAccount._id,
       platform: 'instagram',
       customerIgId: senderId,
+      customerName: customerName,
+      customerUsername: profile?.username || '',
       status: 'active',
       lastMessageAt: new Date(),
     });
@@ -151,6 +157,32 @@ async function handleInstagramDM(event, igAccount, agent) {
     conversation.lastMessageAt = new Date();
     conversation.isRead = false;
     await conversation.save();
+    return;
+  }
+
+  // Check human handoff keywords
+  if (AIService.shouldHandoffToHuman(text, agent.humanHandoffKeywords)) {
+    conversation.status = 'human_handoff';
+    conversation.messages.push({
+      role: 'user',
+      content: text,
+      waMessageId: messageId,
+      type: 'text',
+      timestamp: new Date(),
+    });
+    conversation.messages.push({
+      role: 'system',
+      content: 'System: 🔴 HUMAN HANDOFF REQUESTED. Email notification sent to admin.',
+      timestamp: new Date(),
+    });
+    conversation.lastMessageAt = new Date();
+    conversation.isRead = false;
+    await conversation.save();
+    
+    logger.info(`[EMAIL ALERT] Human handoff triggered for Instagram conversation: ${conversation._id}`);
+
+    const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
+    await igService.sendTextMessage(igAccount.igAccountId, senderId, agent.humanHandoffMessage);
     return;
   }
 

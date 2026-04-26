@@ -65,6 +65,24 @@ class InstagramService {
       return null;
     }
   }
+
+  async getCustomerProfile(igScopedId) {
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/${igScopedId}`,
+        {
+          params: {
+            fields: 'name,username,profile_pic',
+            access_token: this.accessToken,
+          },
+        }
+      );
+      return response.data;
+    } catch (error) {
+      logger.error(`Instagram getCustomerProfile error: ${error.message}`);
+      return null;
+    }
+  }
 }
 
 module.exports = InstagramService;
