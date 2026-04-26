@@ -239,70 +239,35 @@ async function handleInstagramMessageEdit(event, igAccount, agent) {
     return;
   }
 
-  if (numEdit === 0) {
-    logger.info(`Skipping message_edit event for fresh message (num_edit=0) mid=${editedMid}`);
+  // Fetch the current message text and sender from Graph API
+  const messageMeta = await igService.resolveMessageSender(editedMid);
+  const text = messageMeta?.message;
+  const metaSenderId = messageMeta?.from?.id;
+
+  if (!text || !metaSenderId) {
+    logger.warn(`message_edit received but could not resolve message text/sender from Graph API (mid=${editedMid})`);
     return;
   }
 
-  // Try to resolve sender using webhook payload first, then from saved conversation by message id
-  let senderId = event?.sender?.id || event?.from?.id || null;
-  let conversation = null;
-
-  if (!senderId) {
-    conversation = await Conversation.findOne({
-      instagramAccount: igAccount._id,
-      customerIgId: { $exists: true, $ne: null },
-      'messages.waMessageId': editedMid,
-      status: { $in: ['active', 'waiting'] },
-    }).sort('-updatedAt');
-
-    senderId = conversation?.customerIgId || null;
-  }
-
-  // Fallback: resolve sender directly from Graph API using edited message id
-  if (!senderId) {
-    const messageMeta = await igService.resolveMessageSender(editedMid);
-    const metaSenderId = messageMeta?.from?.id || null;
-    if (metaSenderId && metaSenderId !== igAccount.igAccountId) {
-      senderId = metaSenderId;
-      logger.info(`Resolved sender from Graph API for message_edit (mid=${editedMid}, sender=${senderId})`);
-    }
-  }
-
-  if (!senderId) {
-    logger.warn(`message_edit received but sender could not be resolved (mid=${editedMid})`);
+  // Ignore edits/messages made by the connected account itself
+  if (metaSenderId === igAccount.igAccountId) {
+    logger.info(`message_edit event is from the connected account itself, ignoring. (mid=${editedMid})`);
     return;
   }
 
-  const replyText = 'Maine aapka edited message dekha. Please updated message dobara bhej do, main turant reply karta hoon.';
+  logger.info(`Processing message_edit dynamically (mid=${editedMid}, num_edit=${numEdit ?? 0}, sender=${metaSenderId})`);
 
-  const sentMsg = await igService.sendTextMessage(igAccount.igAccountId, senderId, replyText);
+  // Construct a simulated standard message event
+  const simulatedEvent = {
+    sender: { id: metaSenderId },
+    message: {
+      mid: editedMid,
+      text: text,
+      is_echo: false,
+    },
+    timestamp: event.timestamp || Date.now(),
+  };
 
-  // Save assistant reply in existing conversation if available (or resolve once by sender)
-  if (!conversation) {
-    conversation = await Conversation.findOne({
-      instagramAccount: igAccount._id,
-      customerIgId: senderId,
-      status: { $in: ['active', 'waiting'] },
-    }).sort('-updatedAt');
-  }
-
-  if (conversation) {
-    conversation.messages.push({
-      role: 'assistant',
-      content: replyText,
-      waMessageId: sentMsg.message_id,
-      type: 'text',
-      status: 'sent',
-    });
-    conversation.totalMessages += 1;
-    conversation.lastMessageAt = new Date();
-    await conversation.save();
-  }
-
-  logger.info(`Handled Instagram message_edit event (mid=${editedMid}, num_edit=${numEdit ?? 'n/a'})`);
-
-  await Agent.findByIdAndUpdate(agent._id, {
-    $inc: { 'stats.totalMessages': 1 },
-  });
+  // Pass it to the standard DM handler so the AI replies dynamically
+  await handleInstagramDM(simulatedEvent, igAccount, agent);
 }
