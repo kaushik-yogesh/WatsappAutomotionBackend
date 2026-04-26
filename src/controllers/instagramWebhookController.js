@@ -198,35 +198,47 @@ function normalizeInstagramChangeMessage(value) {
 }
 
 async function handleInstagramComment(commentData, igAccount, agent) {
-  // Ignore comments made by the page/account itself
-  if (commentData.from.id === igAccount.igAccountId) {
-    logger.info(`Ignored self-comment by the connected account (${igAccount.igUsername || igAccount.igAccountId})`);
-    return;
+  try {
+    logger.info(`Processing comment webhook payload: ${JSON.stringify(commentData)}`);
+    
+    // Ignore comments made by the page/account itself
+    if (commentData?.from?.id === igAccount.igAccountId) {
+      logger.info(`Ignored self-comment by the connected account (${igAccount.igUsername || igAccount.igAccountId})`);
+      return;
+    }
+
+    const text = commentData.text;
+    const commentId = commentData.id;
+
+    if (!text || !commentId) {
+      logger.warn(`Skipped comment due to missing text or commentId. Payload: ${JSON.stringify(commentData)}`);
+      return;
+    }
+
+    // Generate short AI response for comment
+    const contextMessages = [];
+    const systemPrompt = agent.systemPrompt + "\n\nYou are replying to a public Instagram comment. Keep your reply extremely short, friendly, and under 2 sentences. Encourage them to DM for details.";
+
+    const tempAgent = { ...agent.toObject(), systemPrompt };
+    const aiResult = await AIService.generate(tempAgent, contextMessages, text);
+
+    logger.info(`AI generated comment reply: ${aiResult.content}`);
+
+    const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
+    await igService.replyToComment(igAccount.igAccountId, commentId, aiResult.content);
+
+    logger.info(`Successfully replied to comment ${commentId}`);
+
+    // We don't save comments in Conversations model to save DB space, but we bill the token usage
+    await User.findByIdAndUpdate(igAccount.user, {
+      $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1 },
+    });
+    await Agent.findByIdAndUpdate(agent._id, {
+      $inc: { 'stats.totalMessages': 1 },
+    });
+  } catch (error) {
+    logger.error(`Error in handleInstagramComment: ${error.message}`);
   }
-
-  const text = commentData.text;
-  const commentId = commentData.id;
-
-  if (!text) return;
-
-  // Generate short AI response for comment
-  // We mock a conversation history for comments to keep it stateless but context-aware
-  const contextMessages = [];
-  const systemPrompt = agent.systemPrompt + "\n\nYou are replying to a public Instagram comment. Keep your reply extremely short, friendly, and under 2 sentences. Encourage them to DM for details.";
-
-  const tempAgent = { ...agent.toObject(), systemPrompt };
-  const aiResult = await AIService.generate(tempAgent, contextMessages, text);
-
-  const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
-  await igService.replyToComment(igAccount.igAccountId, commentId, aiResult.content);
-
-  // We don't save comments in Conversations model to save DB space, but we bill the token usage
-  await User.findByIdAndUpdate(igAccount.user, {
-    $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1 },
-  });
-  await Agent.findByIdAndUpdate(agent._id, {
-    $inc: { 'stats.totalMessages': 1 },
-  });
 }
 
 async function handleInstagramMessageEdit(event, igAccount, agent) {
