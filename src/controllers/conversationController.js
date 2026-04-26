@@ -74,7 +74,9 @@ exports.replyToConversation = async (req, res, next) => {
     if (!message) return next(new AppError('Message is required.', 400));
 
     const conversation = await Conversation.findOne({ _id: id, user: req.user._id })
-      .populate('whatsappAccount telegramAccount instagramAccount');
+      .populate({ path: 'whatsappAccount', select: '+accessToken phoneNumberId' })
+      .populate({ path: 'telegramAccount', select: '+botToken' })
+      .populate({ path: 'instagramAccount', select: '+pageAccessToken pageId igAccountId' });
 
     if (!conversation) return next(new AppError('Conversation not found.', 404));
 
