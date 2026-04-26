@@ -1,5 +1,10 @@
 const Conversation = require('../models/Conversation');
 const AppError = require('../utils/AppError');
+const WhatsAppService = require('../services/whatsappService');
+const TelegramService = require('../services/telegramService');
+const InstagramService = require('../services/instagramService');
+const { emitToUser } = require('../utils/socket');
+const { decrypt } = require('../utils/encryption');
 
 exports.getConversations = async (req, res, next) => {
   try {
@@ -55,6 +60,64 @@ exports.getConversation = async (req, res, next) => {
       conversation.isRead = true;
       await conversation.save();
     }
+
+    res.status(200).json({ status: 'success', data: { conversation } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.replyToConversation = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
+    if (!message) return next(new AppError('Message is required.', 400));
+
+    const conversation = await Conversation.findOne({ _id: id, user: req.user._id })
+      .populate('whatsappAccount telegramAccount instagramAccount');
+
+    if (!conversation) return next(new AppError('Conversation not found.', 404));
+
+    let sentMsg;
+
+    if (conversation.platform === 'whatsapp') {
+      const waAccount = conversation.whatsappAccount;
+      if (!waAccount) return next(new AppError('WhatsApp account not connected.', 400));
+      const waService = new WhatsAppService(decrypt(waAccount.accessToken), waAccount.phoneNumberId);
+      sentMsg = await waService.sendTextMessage(conversation.customerPhone, message);
+    } else if (conversation.platform === 'telegram') {
+      const tgAccount = conversation.telegramAccount;
+      if (!tgAccount) return next(new AppError('Telegram account not connected.', 400));
+      const tgService = new TelegramService(tgAccount.botToken);
+      sentMsg = await tgService.sendTextMessage(conversation.customerTgId, message);
+    } else if (conversation.platform === 'instagram') {
+      const igAccount = conversation.instagramAccount;
+      if (!igAccount) return next(new AppError('Instagram account not connected.', 400));
+      const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
+      sentMsg = await igService.sendTextMessage(igAccount.igAccountId, conversation.customerIgId, message);
+    } else {
+      return next(new AppError('Unsupported platform.', 400));
+    }
+
+    // Save assistant message
+    conversation.messages.push({
+      role: 'assistant',
+      content: message,
+      waMessageId: sentMsg?.messages?.[0]?.id || sentMsg?.message_id || '',
+      type: 'text',
+      status: 'sent',
+      timestamp: new Date(),
+    });
+
+    conversation.totalMessages += 1;
+    conversation.lastMessageAt = new Date();
+    await conversation.save();
+
+    // Emit to update socket clients
+    emitToUser(req.user._id.toString(), 'conversation_updated', {
+      conversationId: conversation._id,
+      messages: conversation.messages,
+    });
 
     res.status(200).json({ status: 'success', data: { conversation } });
   } catch (err) {
