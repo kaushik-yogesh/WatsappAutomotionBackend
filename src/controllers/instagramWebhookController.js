@@ -118,8 +118,7 @@ async function handleInstagramDM(event, igAccount, agent) {
   let conversation = await Conversation.findOne({
     instagramAccount: igAccount._id,
     customerIgId: senderId,
-    status: { $in: ['active', 'waiting'] },
-  });
+  }).sort({ createdAt: -1 });
 
   if (!conversation) {
     conversation = await Conversation.create({
@@ -131,6 +130,28 @@ async function handleInstagramDM(event, igAccount, agent) {
       status: 'active',
       lastMessageAt: new Date(),
     });
+  } else if (conversation.status === 'closed') {
+    conversation.status = 'active';
+    conversation.messages.push({
+      role: 'system',
+      content: 'System: Conversation session was reset/reopened.',
+      timestamp: new Date(),
+    });
+  }
+
+  // If human handoff, just append message and do not trigger AI
+  if (conversation.status === 'human_handoff') {
+    conversation.messages.push({
+      role: 'user',
+      content: text,
+      waMessageId: messageId,
+      type: 'text',
+      timestamp: new Date(),
+    });
+    conversation.lastMessageAt = new Date();
+    conversation.isRead = false;
+    await conversation.save();
+    return;
   }
 
   // Check limits

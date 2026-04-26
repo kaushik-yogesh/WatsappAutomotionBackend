@@ -67,10 +67,8 @@ exports.receiveMessage = async (req, res) => {
     let conversation = await Conversation.findOne({
       whatsappAccount: waAccount._id,
       customerPhone: from,
-      status: { $in: ['active', 'waiting'] },
-    });
+    }).sort({ createdAt: -1 });
     
-
     if (!conversation) {
       conversation = await Conversation.create({
         user: waAccount.user,
@@ -87,6 +85,29 @@ exports.receiveMessage = async (req, res) => {
         const waService = new WhatsAppService(decrypt(waAccount.accessToken), phoneNumberId);
         await waService.sendTextMessage(from, agent.greetingMessage);
       }
+    } else if (conversation.status === 'closed') {
+      // Reopen closed conversation
+      conversation.status = 'active';
+      conversation.messages.push({
+        role: 'system',
+        content: 'System: Conversation session was reset/reopened.',
+        timestamp: new Date(),
+      });
+    }
+
+    // If human handoff, just append message and do not trigger AI
+    if (conversation.status === 'human_handoff') {
+      conversation.messages.push({
+        role: 'user',
+        content: text,
+        waMessageId: messageId,
+        type: 'text',
+        timestamp: new Date(parseInt(timestamp) * 1000),
+      });
+      conversation.lastMessageAt = new Date();
+      conversation.isRead = false;
+      await conversation.save();
+      return;
     }
 
     // 4. Check business hours

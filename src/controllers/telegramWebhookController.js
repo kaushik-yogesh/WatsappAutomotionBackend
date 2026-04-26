@@ -46,8 +46,7 @@ exports.receiveMessage = async (req, res) => {
     let conversation = await Conversation.findOne({
       telegramAccount: tgAccount._id,
       customerTgId: fromId.toString(),
-      status: { $in: ['active', 'waiting'] },
-    });
+    }).sort({ createdAt: -1 });
     
     if (!conversation) {
       conversation = await Conversation.create({
@@ -67,6 +66,28 @@ exports.receiveMessage = async (req, res) => {
         const tgService = new TelegramService(tgAccount.botToken);
         await tgService.sendTextMessage(chatId, agent.greetingMessage);
       }
+    } else if (conversation.status === 'closed') {
+      conversation.status = 'active';
+      conversation.messages.push({
+        role: 'system',
+        content: 'System: Conversation session was reset/reopened.',
+        timestamp: new Date(),
+      });
+    }
+
+    // If human handoff, just append message and do not trigger AI
+    if (conversation.status === 'human_handoff') {
+      conversation.messages.push({
+        role: 'user',
+        content: text,
+        waMessageId: messageId.toString(),
+        type: 'text',
+        timestamp: new Date(timestamp * 1000),
+      });
+      conversation.lastMessageAt = new Date();
+      conversation.isRead = false;
+      await conversation.save();
+      return;
     }
 
     // 4. Check business hours
