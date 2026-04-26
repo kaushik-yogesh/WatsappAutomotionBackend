@@ -11,7 +11,8 @@ class InstagramService {
 
   async sendTextMessage(igAccountId, recipientId, text) {
     try {
-      const endpointId = igAccountId || this.pageId || 'me';
+      // Must use 'me' or pageId, because igAccountId throws "Application does not have the capability to make this API call"
+      const endpointId = 'me';
       const response = await axios.post(
         `${this.baseUrl}/${endpointId}/messages`,
         {
