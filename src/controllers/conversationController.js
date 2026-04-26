@@ -3,10 +3,11 @@ const AppError = require('../utils/AppError');
 
 exports.getConversations = async (req, res, next) => {
   try {
-    const { status, agentId, page = 1, limit = 20, search } = req.query;
+    const { status, agentId, platform, page = 1, limit = 20, search } = req.query;
     const filter = { user: req.user._id };
 
     if (status) filter.status = status;
+    if (platform) filter.platform = platform;
     if (agentId) filter.agent = agentId;
     if (search) {
       filter.$or = [
