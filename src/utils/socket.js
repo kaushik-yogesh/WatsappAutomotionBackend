@@ -1,0 +1,64 @@
+const socketIO = require('socket.io');
+const jwt = require('jsonwebtoken');
+const logger = require('./logger');
+
+let io;
+
+const initSocket = (server) => {
+  io = socketIO(server, {
+    cors: {
+      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+      methods: ['GET', 'POST'],
+      credentials: true,
+    },
+  });
+
+  io.use((socket, next) => {
+    try {
+      // Assuming token is passed in auth object or query
+      const token = socket.handshake.auth.token || socket.handshake.headers.cookie?.split('token=')[1]?.split(';')[0];
+      if (!token) {
+        return next(new Error('Authentication error'));
+      }
+      
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      socket.userId = decoded.id;
+      next();
+    } catch (err) {
+      next(new Error('Authentication error'));
+    }
+  });
+
+  io.on('connection', (socket) => {
+    logger.info(`Socket connected: ${socket.id} for User: ${socket.userId}`);
+    
+    // Join a room for the specific user so we can emit to all their devices
+    socket.join(`user_${socket.userId}`);
+
+    socket.on('disconnect', () => {
+      logger.info(`Socket disconnected: ${socket.id}`);
+    });
+  });
+
+  return io;
+};
+
+const getIO = () => {
+  if (!io) {
+    throw new Error('Socket.io not initialized!');
+  }
+  return io;
+};
+
+// Emits an event to a specific user's room
+const emitToUser = (userId, event, data) => {
+  if (io) {
+    io.to(`user_${userId}`).emit(event, data);
+  }
+};
+
+module.exports = {
+  initSocket,
+  getIO,
+  emitToUser,
+};

@@ -6,6 +6,7 @@ const Conversation = require('../models/Conversation');
 const User = require('../models/User');
 const { decrypt } = require('../utils/encryption');
 const logger = require('../utils/logger');
+const { emitToUser } = require('../utils/socket');
 
 // GET - Webhook verification from Meta
 exports.verifyWebhook = async (req, res) => {
@@ -137,6 +138,11 @@ exports.receiveMessage = async (req, res) => {
       conversation.isRead = false;
       await conversation.save();
       
+      emitToUser(waAccount.user.toString(), 'conversation_updated', {
+        conversationId: conversation._id,
+        messages: conversation.messages,
+      });
+      
       // Mock email alert
       logger.info(`[EMAIL ALERT] Human handoff triggered for WA conversation: ${conversation._id}`);
 
@@ -193,6 +199,11 @@ exports.receiveMessage = async (req, res) => {
     conversation.lastMessageAt = new Date();
     conversation.isRead = false;
     await conversation.save();
+
+    emitToUser(waAccount.user.toString(), 'conversation_updated', {
+      conversationId: conversation._id,
+      messages: conversation.messages,
+    });
 
     // 13. Update usage counters
     await User.findByIdAndUpdate(waAccount.user, {

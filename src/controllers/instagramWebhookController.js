@@ -5,6 +5,7 @@ const Agent = require('../models/Agent');
 const Conversation = require('../models/Conversation');
 const User = require('../models/User');
 const logger = require('../utils/logger');
+const { emitToUser } = require('../utils/socket');
 
 exports.verifyWebhook = (req, res) => {
   const mode = req.query['hub.mode'] || req.query['hub_mode'];
@@ -157,6 +158,12 @@ async function handleInstagramDM(event, igAccount, agent) {
     conversation.lastMessageAt = new Date();
     conversation.isRead = false;
     await conversation.save();
+
+    emitToUser(igAccount.user.toString(), 'conversation_updated', {
+      conversationId: conversation._id,
+      messages: conversation.messages,
+    });
+    
     return;
   }
 
@@ -179,6 +186,11 @@ async function handleInstagramDM(event, igAccount, agent) {
     conversation.isRead = false;
     await conversation.save();
     
+    emitToUser(igAccount.user.toString(), 'conversation_updated', {
+      conversationId: conversation._id,
+      messages: conversation.messages,
+    });
+
     logger.info(`[EMAIL ALERT] Human handoff triggered for Instagram conversation: ${conversation._id}`);
 
     const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
@@ -223,6 +235,11 @@ async function handleInstagramDM(event, igAccount, agent) {
   conversation.totalTokensUsed += aiResult.tokensUsed;
   conversation.lastMessageAt = new Date();
   await conversation.save();
+
+  emitToUser(igAccount.user.toString(), 'conversation_updated', {
+    conversationId: conversation._id,
+    messages: conversation.messages,
+  });
 
   await User.findByIdAndUpdate(igAccount.user, {
     $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1 },

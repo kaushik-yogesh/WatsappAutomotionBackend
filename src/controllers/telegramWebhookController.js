@@ -5,6 +5,7 @@ const Agent = require('../models/Agent');
 const Conversation = require('../models/Conversation');
 const User = require('../models/User');
 const logger = require('../utils/logger');
+const { emitToUser } = require('../utils/socket');
 
 exports.receiveMessage = async (req, res) => {
   // Always respond 200 immediately to Telegram
@@ -117,6 +118,11 @@ exports.receiveMessage = async (req, res) => {
       conversation.isRead = false;
       await conversation.save();
       
+      emitToUser(tgAccount.user.toString(), 'conversation_updated', {
+        conversationId: conversation._id,
+        messages: conversation.messages,
+      });
+
       logger.info(`[EMAIL ALERT] Human handoff triggered for TG conversation: ${conversation._id}`);
 
       const tgService = new TelegramService(tgAccount.botToken);
@@ -170,6 +176,11 @@ exports.receiveMessage = async (req, res) => {
     conversation.lastMessageAt = new Date();
     conversation.isRead = false;
     await conversation.save();
+
+    emitToUser(tgAccount.user.toString(), 'conversation_updated', {
+      conversationId: conversation._id,
+      messages: conversation.messages,
+    });
 
     // 12. Update usage counters
     await User.findByIdAndUpdate(tgAccount.user, {
