@@ -25,7 +25,8 @@ class InstagramService {
       );
       return response.data;
     } catch (error) {
-      logger.error('Instagram sendTextMessage error:', error.response?.data || error.message);
+      const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      logger.error(`Instagram sendTextMessage error: ${errDetail}`);
       throw error;
     }
   }
@@ -39,7 +40,8 @@ class InstagramService {
       );
       return response.data;
     } catch (error) {
-      logger.error('Instagram replyToComment error:', error.response?.data || error.message);
+      const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      logger.error(`Instagram replyToComment error: ${errDetail}`);
       throw error;
     }
   }
@@ -57,7 +59,8 @@ class InstagramService {
       );
       return response.data;
     } catch (error) {
-      logger.error('Instagram resolveMessageSender error:', error.response?.data || error.message);
+      const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      logger.error(`Instagram resolveMessageSender error: ${errDetail}`);
       return null;
     }
   }
