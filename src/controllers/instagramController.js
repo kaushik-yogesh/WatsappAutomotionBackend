@@ -63,10 +63,32 @@ exports.autoConnect = async (req, res, next) => {
     if (!accessToken) return next(new AppError('Facebook access token is required', 400));
 
     const apiVersion = process.env.META_API_VERSION || 'v19.0';
+    let finalUserToken = accessToken;
+
+    // Exchange short-lived User token for long-lived User token
+    // This ensures that the Page Access Tokens we fetch next are NON-EXPIRING
+    if (process.env.META_APP_ID && process.env.META_APP_SECRET) {
+      try {
+        const tokenExchangeRes = await axios.get(`https://graph.facebook.com/${apiVersion}/oauth/access_token`, {
+          params: {
+            grant_type: 'fb_exchange_token',
+            client_id: process.env.META_APP_ID,
+            client_secret: process.env.META_APP_SECRET,
+            fb_exchange_token: accessToken,
+          }
+        });
+        if (tokenExchangeRes.data && tokenExchangeRes.data.access_token) {
+          finalUserToken = tokenExchangeRes.data.access_token;
+          logger.info('Successfully generated long-lived access token');
+        }
+      } catch (err) {
+        logger.warn(`Failed to get long-lived token: ${err.response?.data?.error?.message || err.message}`);
+      }
+    }
     
-    // 1. Get Facebook Pages
+    // 1. Get Facebook Pages using the (now long-lived) token
     const pagesResponse = await axios.get(`https://graph.facebook.com/${apiVersion}/me/accounts`, {
-      params: { access_token: accessToken }
+      params: { access_token: finalUserToken }
     });
 
     const pages = pagesResponse.data.data;
