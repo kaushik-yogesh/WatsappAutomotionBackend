@@ -11,8 +11,7 @@ class InstagramService {
 
   async sendTextMessage(igAccountId, recipientId, text) {
     try {
-      // The Graph API requires using me/messages or pageId/messages for Instagram messaging, not the IG account ID
-      const endpointId = 'me';
+      const endpointId = igAccountId || this.pageId || 'me';
       const response = await axios.post(
         `${this.baseUrl}/${endpointId}/messages`,
         {
