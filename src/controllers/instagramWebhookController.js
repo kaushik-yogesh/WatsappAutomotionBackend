@@ -239,6 +239,11 @@ async function handleInstagramMessageEdit(event, igAccount, agent) {
     return;
   }
 
+  if (numEdit === 0) {
+    logger.info(`Skipping message_edit event for fresh message (num_edit=0) mid=${editedMid}`);
+    return;
+  }
+
   // Try to resolve sender using webhook payload first, then from saved conversation by message id
   let senderId = event?.sender?.id || event?.from?.id || null;
   let conversation = null;
