@@ -22,6 +22,7 @@ const telegramRoutes = require('./routes/telegramRoutes');
 const telegramWebhookRoutes = require('./routes/telegramWebhookRoutes');
 const instagramRoutes = require('./routes/instagramRoutes');
 const instagramWebhookRoutes = require('./routes/instagramWebhookRoutes');
+const socialHubRoutes = require('./routes/socialHub');
 
 const app = express();
 
@@ -97,6 +98,7 @@ app.use('/api/instagram', instagramRoutes);
 app.use('/api/agents', agentRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/billing', billingRoutes);
+app.use('/api/social-hub', socialHubRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────
 app.all('*', (req, res, next) => {
