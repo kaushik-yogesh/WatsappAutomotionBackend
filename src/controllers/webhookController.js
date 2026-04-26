@@ -31,7 +31,25 @@ exports.receiveMessage = async (req, res) => {
 
   try {
     const parsed = WhatsAppService.parseWebhookMessage(req.body);
-    if (!parsed || !parsed.text) return; // Skip non-text for now
+    if (!parsed) return;
+
+    if (parsed.isStatusUpdate) {
+      const { messageId, status } = parsed;
+      const conv = await Conversation.findOneAndUpdate(
+        { 'messages.waMessageId': messageId },
+        { $set: { 'messages.$.status': status } },
+        { new: true }
+      );
+      if (conv) {
+        emitToUser(conv.user.toString(), 'conversation_updated', {
+          conversationId: conv._id,
+          messages: conv.messages,
+        });
+      }
+      return;
+    }
+
+    if (!parsed.text) return; // Skip non-text for now
 
     const { phoneNumberId, from, customerName, messageId, text, timestamp } = parsed;
 

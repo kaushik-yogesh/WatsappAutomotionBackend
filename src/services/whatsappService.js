@@ -130,7 +130,21 @@ class WhatsAppService {
       const changes = entry?.changes?.[0];
       const value = changes?.value;
 
-      if (!value?.messages?.[0]) return null;
+      if (!value) return null;
+
+      if (value.statuses && value.statuses[0]) {
+        const statusObj = value.statuses[0];
+        return {
+          isStatusUpdate: true,
+          phoneNumberId: value.metadata?.phone_number_id,
+          messageId: statusObj.id,
+          status: statusObj.status,
+          recipientId: statusObj.recipient_id,
+          timestamp: statusObj.timestamp,
+        };
+      }
+
+      if (!value.messages?.[0]) return null;
 
       const message = value.messages[0];
       const contact = value.contacts?.[0];
