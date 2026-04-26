@@ -38,7 +38,7 @@ exports.connectAccount = async (req, res, next) => {
     try {
       await axios.post(`https://graph.facebook.com/${apiVersion}/${pageId}/subscribed_apps`, null, {
         params: {
-          subscribed_fields: 'messages,messaging_postbacks',
+          subscribed_fields: 'messages,messaging_postbacks,comments',
           access_token: pageAccessToken
         }
       });
@@ -127,7 +127,7 @@ exports.autoConnect = async (req, res, next) => {
           try {
             await axios.post(`https://graph.facebook.com/${apiVersion}/${page.id}/subscribed_apps`, null, {
               params: {
-                subscribed_fields: 'messages,messaging_postbacks',
+                subscribed_fields: 'messages,messaging_postbacks,comments',
                 access_token: page.access_token
               }
             });
