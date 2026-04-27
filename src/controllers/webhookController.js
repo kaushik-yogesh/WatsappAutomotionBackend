@@ -6,7 +6,7 @@ const Conversation = require('../models/Conversation');
 const User = require('../models/User');
 const { decrypt } = require('../utils/encryption');
 const logger = require('../utils/logger');
-const { emitToUser } = require('../utils/socket');
+const { emitToUser, emitNotification } = require('../utils/socket');
 
 // GET - Webhook verification from Meta
 exports.verifyWebhook = async (req, res) => {
@@ -126,6 +126,14 @@ exports.receiveMessage = async (req, res) => {
       conversation.lastMessageAt = new Date();
       conversation.isRead = false;
       await conversation.save();
+
+      emitNotification(waAccount.user.toString(), {
+        type: 'new_message',
+        title: '💬 New WhatsApp Message',
+        message: `${customerName || from}: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`,
+        conversationId: conversation._id,
+        platform: 'whatsapp',
+      });
       return;
     }
 
@@ -159,6 +167,14 @@ exports.receiveMessage = async (req, res) => {
       emitToUser(waAccount.user.toString(), 'conversation_updated', {
         conversationId: conversation._id,
         messages: conversation.messages,
+      });
+
+      emitNotification(waAccount.user.toString(), {
+        type: 'human_handoff',
+        title: '🔴 Human Handoff Requested',
+        message: `WhatsApp: ${customerName || from} needs human support.`,
+        conversationId: conversation._id,
+        platform: 'whatsapp',
       });
       
       // Mock email alert
@@ -221,6 +237,14 @@ exports.receiveMessage = async (req, res) => {
     emitToUser(waAccount.user.toString(), 'conversation_updated', {
       conversationId: conversation._id,
       messages: conversation.messages,
+    });
+
+    emitNotification(waAccount.user.toString(), {
+      type: 'new_message',
+      title: '💬 New WhatsApp Message',
+      message: `${customerName || from}: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`,
+      conversationId: conversation._id,
+      platform: 'whatsapp',
     });
 
     // 13. Update usage counters

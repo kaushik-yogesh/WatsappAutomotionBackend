@@ -57,8 +57,25 @@ const emitToUser = (userId, event, data) => {
   }
 };
 
+// Emits a structured notification to a specific user
+const emitNotification = (userId, { type, title, message, conversationId, platform }) => {
+  if (io) {
+    io.to(`user_${userId}`).emit('new_notification', {
+      id: Date.now().toString(),
+      type,         // 'new_message' | 'human_handoff' | 'system'
+      title,
+      message,
+      conversationId: conversationId?.toString() || null,
+      platform: platform || null,
+      timestamp: new Date().toISOString(),
+      read: false,
+    });
+  }
+};
+
 module.exports = {
   initSocket,
   getIO,
   emitToUser,
+  emitNotification,
 };

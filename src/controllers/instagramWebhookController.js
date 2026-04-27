@@ -5,7 +5,7 @@ const Agent = require('../models/Agent');
 const Conversation = require('../models/Conversation');
 const User = require('../models/User');
 const logger = require('../utils/logger');
-const { emitToUser } = require('../utils/socket');
+const { emitToUser, emitNotification } = require('../utils/socket');
 
 exports.verifyWebhook = (req, res) => {
   const mode = req.query['hub.mode'] || req.query['hub_mode'];
@@ -163,6 +163,14 @@ async function handleInstagramDM(event, igAccount, agent) {
       conversationId: conversation._id,
       messages: conversation.messages,
     });
+
+    emitNotification(igAccount.user.toString(), {
+      type: 'new_message',
+      title: '📸 New Instagram DM',
+      message: `${conversation.customerName || senderId}: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`,
+      conversationId: conversation._id,
+      platform: 'instagram',
+    });
     
     return;
   }
@@ -189,6 +197,14 @@ async function handleInstagramDM(event, igAccount, agent) {
     emitToUser(igAccount.user.toString(), 'conversation_updated', {
       conversationId: conversation._id,
       messages: conversation.messages,
+    });
+
+    emitNotification(igAccount.user.toString(), {
+      type: 'human_handoff',
+      title: '🔴 Human Handoff Requested',
+      message: `Instagram: ${conversation.customerName || senderId} needs human support.`,
+      conversationId: conversation._id,
+      platform: 'instagram',
     });
 
     logger.info(`[EMAIL ALERT] Human handoff triggered for Instagram conversation: ${conversation._id}`);
@@ -239,6 +255,14 @@ async function handleInstagramDM(event, igAccount, agent) {
   emitToUser(igAccount.user.toString(), 'conversation_updated', {
     conversationId: conversation._id,
     messages: conversation.messages,
+  });
+
+  emitNotification(igAccount.user.toString(), {
+    type: 'new_message',
+    title: '📸 New Instagram DM',
+    message: `${conversation.customerName || senderId}: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`,
+    conversationId: conversation._id,
+    platform: 'instagram',
   });
 
   await User.findByIdAndUpdate(igAccount.user, {

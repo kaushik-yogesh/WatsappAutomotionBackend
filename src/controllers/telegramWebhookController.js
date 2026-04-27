@@ -5,7 +5,7 @@ const Agent = require('../models/Agent');
 const Conversation = require('../models/Conversation');
 const User = require('../models/User');
 const logger = require('../utils/logger');
-const { emitToUser } = require('../utils/socket');
+const { emitToUser, emitNotification } = require('../utils/socket');
 
 exports.receiveMessage = async (req, res) => {
   // Always respond 200 immediately to Telegram
@@ -88,6 +88,14 @@ exports.receiveMessage = async (req, res) => {
       conversation.lastMessageAt = new Date();
       conversation.isRead = false;
       await conversation.save();
+
+      emitNotification(tgAccount.user.toString(), {
+        type: 'new_message',
+        title: '✈️ New Telegram Message',
+        message: `${fromName || fromUsername || fromId}: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`,
+        conversationId: conversation._id,
+        platform: 'telegram',
+      });
       return;
     }
 
@@ -121,6 +129,14 @@ exports.receiveMessage = async (req, res) => {
       emitToUser(tgAccount.user.toString(), 'conversation_updated', {
         conversationId: conversation._id,
         messages: conversation.messages,
+      });
+
+      emitNotification(tgAccount.user.toString(), {
+        type: 'human_handoff',
+        title: '🔴 Human Handoff Requested',
+        message: `Telegram: ${fromName || fromUsername || fromId} needs human support.`,
+        conversationId: conversation._id,
+        platform: 'telegram',
       });
 
       logger.info(`[EMAIL ALERT] Human handoff triggered for TG conversation: ${conversation._id}`);
@@ -180,6 +196,14 @@ exports.receiveMessage = async (req, res) => {
     emitToUser(tgAccount.user.toString(), 'conversation_updated', {
       conversationId: conversation._id,
       messages: conversation.messages,
+    });
+
+    emitNotification(tgAccount.user.toString(), {
+      type: 'new_message',
+      title: '✈️ New Telegram Message',
+      message: `${fromName || fromUsername || fromId}: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`,
+      conversationId: conversation._id,
+      platform: 'telegram',
     });
 
     // 12. Update usage counters
