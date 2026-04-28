@@ -127,6 +127,12 @@ exports.replyToConversation = async (req, res, next) => {
   }
 };
 
+    res.status(200).json({ status: 'success', data: { conversation } });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.closeConversation = async (req, res, next) => {
   try {
     const conversation = await Conversation.findOneAndUpdate(
@@ -135,11 +141,51 @@ exports.closeConversation = async (req, res, next) => {
       { new: true }
     );
     if (!conversation) return next(new AppError('Conversation not found.', 404));
+
+    conversation.messages.push({
+      role: 'system',
+      content: 'System: Conversation closed.',
+      timestamp: new Date(),
+    });
+    await conversation.save();
+
     res.status(200).json({ status: 'success', data: { conversation } });
   } catch (err) {
     next(err);
   }
 };
+
+exports.toggleStatus = async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    if (!['active', 'human_handoff', 'closed'].includes(status)) {
+      return next(new AppError('Invalid status.', 400));
+    }
+
+    const conversation = await Conversation.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id },
+      { status },
+      { new: true }
+    );
+
+    if (!conversation) return next(new AppError('Conversation not found.', 404));
+
+    // Add a system message to indicate status change
+    const statusLabel = status === 'active' ? 'AI Agent' : status === 'human_handoff' ? 'Human Agent' : 'Closed';
+    conversation.messages.push({
+      role: 'system',
+      content: `System: Conversation assigned to ${statusLabel}.`,
+      timestamp: new Date(),
+    });
+    await conversation.save();
+
+    res.status(200).json({ status: 'success', data: { conversation } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
 
 exports.getDashboardStats = async (req, res, next) => {
   try {

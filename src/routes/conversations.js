@@ -11,6 +11,8 @@ convRouter.get('/', convController.getConversations);
 convRouter.get('/:id', convController.getConversation);
 convRouter.post('/:id/reply', convController.replyToConversation);
 convRouter.patch('/:id/close', convController.closeConversation);
+convRouter.patch('/:id/toggle-status', convController.toggleStatus);
 
 module.exports = convRouter;
+
 
