@@ -12,11 +12,27 @@ const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 class AIService {
   // Build messages array from conversation history
-  static buildMessages(systemPrompt, conversationHistory, newUserMessage) {
-    const tokenSavingInstruction = "\n\nIMPORTANT: Keep your responses as short and concise as possible. Provide necessary details but use minimal words to save tokens. Avoid long paragraphs. For social media platforms like Instagram/WhatsApp, short responses work best.";
-    
+  static buildMessages(systemPrompt, conversationHistory, newUserMessage, platform = 'whatsapp') {
+    const isWhatsApp = platform === 'whatsapp';
+
+    const platformInstruction = isWhatsApp
+      ? `
+
+FORMATTING RULES (strictly follow):
+- Reply like a human in a casual WhatsApp chat. Be friendly, natural, and conversational.
+- Keep responses SHORT and TO THE POINT. 1-3 sentences max unless detail is truly needed.
+- DO NOT use markdown: no #, ##, ###, **, __, *, ~~, >, ---  or any markdown syntax.
+- DO NOT use bullet points with - or * symbols. If listing, use plain numbered lines or commas.
+- You may use these WhatsApp-supported symbols only when genuinely needed: *bold*, _italic_, ~strikethrough~
+- Never start with greetings like 'Hello!' or 'Sure!' on every reply.
+- Avoid filler phrases like 'Great question!', 'Of course!', 'Certainly!'.
+- Write in plain, simple language. No jargon unless the user used it first.`
+      : `
+
+IMPORTANT: Keep responses concise and relevant. Avoid long paragraphs. Use minimal words.`;
+
     const messages = [
-      { role: 'system', content: systemPrompt + tokenSavingInstruction },
+      { role: 'system', content: systemPrompt + platformInstruction },
       ...conversationHistory.map((m) => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
         content: m.content,
@@ -24,6 +40,38 @@ class AIService {
       { role: 'user', content: newUserMessage },
     ];
     return messages;
+  }
+
+  // Sanitize AI response for WhatsApp - strip markdown, clean up formatting
+  static sanitizeForWhatsApp(text) {
+    if (!text) return text;
+
+    let clean = text
+      // Remove heading markers (# ## ### ####)
+      .replace(/^#{1,6}\s*/gm, '')
+      // Remove horizontal rules
+      .replace(/^[-*_]{3,}\s*$/gm, '')
+      // Remove bold markdown (**text** or __text__) - convert to plain
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/__(.+?)__/g, '$1')
+      // Remove italic markdown (*text* or _text_) - but keep WhatsApp _italic_
+      // Only strip single * used as markdown italic (not WhatsApp bold)
+      .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '$1')
+      // Remove strikethrough ~~text~~
+      .replace(/~~(.+?)~~/g, '$1')
+      // Remove inline code `text`
+      .replace(/`(.+?)`/g, '$1')
+      // Remove code blocks ```...```
+      .replace(/```[\s\S]*?```/g, '')
+      // Remove blockquotes >
+      .replace(/^>\s*/gm, '')
+      // Convert markdown bullet lists (- item or * item) to plain dashes
+      .replace(/^[-*+]\s+/gm, '- ')
+      // Remove excessive blank lines (more than 2 newlines → single newline)
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    return clean;
   }
 
   // Generate response using OpenAI
@@ -114,8 +162,8 @@ class AIService {
   }
 
   // Main generate function - routes to correct provider
-  static async generate(agent, conversationHistory, userMessage) {
-    const messages = this.buildMessages(agent.systemPrompt, conversationHistory, userMessage);
+  static async generate(agent, conversationHistory, userMessage, platform = 'whatsapp') {
+    const messages = this.buildMessages(agent.systemPrompt, conversationHistory, userMessage, platform);
 
     try {
       if (agent.aiProvider === 'anthropic') {

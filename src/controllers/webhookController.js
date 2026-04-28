@@ -208,14 +208,17 @@ exports.receiveMessage = async (req, res) => {
       .slice(-(agent.contextWindow * 2))
       .map((m) => ({ role: m.role, content: m.content }));
 
-    // 9. Generate AI response
-    const aiResult = await AIService.generate(agent, contextMessages.slice(0, -1), text);
-  
+    // 9. Generate AI response (platform='whatsapp' for proper formatting instructions)
+    const aiResult = await AIService.generate(agent, contextMessages.slice(0, -1), text, 'whatsapp');
+
+    // 9a. Sanitize response - remove markdown symbols not supported by WhatsApp
+    const cleanReply = AIService.sanitizeForWhatsApp(aiResult.content) || 'Sorry, something went wrong.';
+
     // 10. Mark incoming as read
     const waService = new WhatsAppService(decrypt(waAccount.accessToken), phoneNumberId);
     await waService.markAsRead(messageId);
-    // 11. Send AI reply
-    const sentMsg = await waService.sendTextMessage(from, aiResult.content||"this is new AI reply");
+    // 11. Send AI reply (sanitized, human-friendly)
+    const sentMsg = await waService.sendTextMessage(from, cleanReply);
 
     // 12. Save assistant message
     conversation.messages.push({
