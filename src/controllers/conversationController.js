@@ -200,3 +200,132 @@ exports.getDashboardStats = async (req, res, next) => {
     next(err);
   }
 };
+
+// ─── LEAD INTELLIGENCE DASHBOARD ─────────────────────────────────────────────
+exports.getLeadsDashboard = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    const { platform, status, search, page = 1, limit = 20 } = req.query;
+
+    // Interest keywords that indicate high buying intent
+    const HIGH_INTEREST_KEYWORDS = [
+      'price', 'cost', 'how much', 'buy', 'purchase', 'order', 'demo', 'trial',
+      'interested', 'sign up', 'register', 'subscribe', 'plan', 'pricing',
+      'sdx', 'product', 'service', 'feature', 'integration', 'start', 'begin',
+      'kitna', 'khareedna', 'lena hai', 'batao', 'chahiye', 'karna hai',
+    ];
+
+    const filter = { user: userId };
+    if (platform) filter.platform = platform;
+    if (status) filter.status = status;
+    if (search) {
+      filter.$or = [
+        { customerName: { $regex: search, $options: 'i' } },
+        { customerPhone: { $regex: search, $options: 'i' } },
+        { customerUsername: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [conversations, total] = await Promise.all([
+      Conversation.find(filter)
+        .populate('agent', 'name')
+        .sort({ lastMessageAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Conversation.countDocuments(filter),
+    ]);
+
+    // Compute interest score + classify each lead
+    const leads = conversations.map((conv) => {
+      const userMessages = conv.messages.filter((m) => m.role === 'user');
+      const msgCount = userMessages.length;
+      const allText = userMessages.map((m) => m.content?.toLowerCase() || '').join(' ');
+
+      // Count matching interest keywords
+      const keywordMatches = HIGH_INTEREST_KEYWORDS.filter((kw) =>
+        allText.includes(kw.toLowerCase())
+      ).length;
+
+      // Interest score: 0–100
+      // Base: message volume (up to 40pts), keywords (up to 40pts), handoff (+20pts)
+      const msgScore = Math.min(msgCount * 5, 40);
+      const kwScore = Math.min(keywordMatches * 8, 40);
+      const handoffBonus = conv.status === 'human_handoff' ? 20 : 0;
+      const interestScore = Math.min(msgScore + kwScore + handoffBonus, 100);
+
+      // Engagement level label
+      let engagementLevel, engagementColor;
+      if (interestScore >= 70) { engagementLevel = 'Hot'; engagementColor = 'red'; }
+      else if (interestScore >= 40) { engagementLevel = 'Warm'; engagementColor = 'amber'; }
+      else if (interestScore >= 15) { engagementLevel = 'Interested'; engagementColor = 'blue'; }
+      else { engagementLevel = 'Cold'; engagementColor = 'gray'; }
+
+      // Extract matched keywords for display (unique, max 5)
+      const matchedKeywords = [...new Set(
+        HIGH_INTEREST_KEYWORDS.filter((kw) => allText.includes(kw.toLowerCase()))
+      )].slice(0, 5);
+
+      // Last user message preview
+      const lastUserMsg = [...userMessages].reverse()[0]?.content || '';
+
+      return {
+        _id: conv._id,
+        customerName: conv.customerName || conv.customerUsername || conv.customerPhone || 'Unknown',
+        customerPhone: conv.customerPhone,
+        customerUsername: conv.customerUsername,
+        platform: conv.platform || 'whatsapp',
+        status: conv.status,
+        interestScore,
+        engagementLevel,
+        engagementColor,
+        matchedKeywords,
+        wantsHuman: conv.status === 'human_handoff',
+        totalMessages: conv.totalMessages || conv.messages.length,
+        userMessages: msgCount,
+        lastMessageAt: conv.lastMessageAt || conv.updatedAt,
+        lastUserMessage: lastUserMsg.slice(0, 120),
+        agentName: conv.agent?.name || '—',
+        createdAt: conv.createdAt,
+      };
+    });
+
+    // ── Summary aggregations ──────────────────────────────────────────────────
+    const [
+      platformBreakdown,
+      handoffCount,
+      totalLeadsCount,
+      hotLeadsCount,
+    ] = await Promise.all([
+      Conversation.aggregate([
+        { $match: { user: userId } },
+        { $group: { _id: '$platform', count: { $sum: 1 } } },
+      ]),
+      Conversation.countDocuments({ user: userId, status: 'human_handoff' }),
+      Conversation.countDocuments({ user: userId }),
+      // Hot leads = conversations with totalMessages >= 6 (proxy for high engagement)
+      Conversation.countDocuments({ user: userId, totalMessages: { $gte: 6 } }),
+    ]);
+
+    res.status(200).json({
+      status: 'success',
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: Number(page),
+      data: {
+        leads,
+        summary: {
+          totalLeads: totalLeadsCount,
+          hotLeads: hotLeadsCount,
+          wantHuman: handoffCount,
+          platformBreakdown: platformBreakdown.map((p) => ({ platform: p._id || 'whatsapp', count: p.count })),
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
