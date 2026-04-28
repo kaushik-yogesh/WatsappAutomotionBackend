@@ -127,12 +127,6 @@ exports.replyToConversation = async (req, res, next) => {
   }
 };
 
-    res.status(200).json({ status: 'success', data: { conversation } });
-  } catch (err) {
-    next(err);
-  }
-};
-
 exports.closeConversation = async (req, res, next) => {
   try {
     const conversation = await Conversation.findOneAndUpdate(
