@@ -24,6 +24,7 @@ const instagramRoutes = require('./routes/instagramRoutes');
 const instagramWebhookRoutes = require('./routes/instagramWebhookRoutes');
 const socialHubRoutes = require('./routes/socialHub');
 const notificationRoutes = require('./routes/notifications');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 
@@ -101,6 +102,7 @@ app.use('/api/conversations', conversationRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/social-hub', socialHubRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────
 app.all('*', (req, res, next) => {
