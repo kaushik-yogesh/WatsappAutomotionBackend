@@ -13,7 +13,7 @@ const initSocket = (server) => {
     },
   });
 
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     try {
       // Assuming token is passed in auth object or query
       const token = socket.handshake.auth.token || socket.handshake.headers.cookie?.split('token=')[1]?.split(';')[0];
