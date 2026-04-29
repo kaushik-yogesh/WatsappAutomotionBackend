@@ -10,8 +10,14 @@ const transporter = nodemailer.createTransport({
 
 const sendEmail = async ({ to, subject, html }) => {
   try {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      logger.warn('SMTP credentials missing. Email not sent, but logging content for debug:');
+      logger.info(`To: ${to}, Subject: ${subject}`);
+      return;
+    }
+
     await transporter.sendMail({
-      from: process.env.EMAIL_FROM,
+      from: process.env.EMAIL_FROM || 'no-reply@whatsagent.com',
       to,
       subject,
       html,
@@ -19,7 +25,7 @@ const sendEmail = async ({ to, subject, html }) => {
     logger.info(`Email sent to ${to}`);
   } catch (err) {
     logger.error('Email send failed:', err.message);
-    throw err;
+    throw new Error('Email delivery failed. Please contact support or check SMTP settings.');
   }
 };
 
