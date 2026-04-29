@@ -13,4 +13,8 @@ router.get('/users', adminController.getAllUsers);
 router.get('/users/:id', adminController.getUserDetails);
 router.patch('/users/:id', adminController.updateUser);
 
+router.get('/health', adminController.getSystemHealth);
+router.get('/settings', adminController.getSystemSettings);
+router.patch('/settings', adminController.updateSystemSetting);
+
 module.exports = router;

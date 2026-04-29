@@ -25,6 +25,7 @@ const instagramWebhookRoutes = require('./routes/instagramWebhookRoutes');
 const socialHubRoutes = require('./routes/socialHub');
 const notificationRoutes = require('./routes/notifications');
 const adminRoutes = require('./routes/admin');
+const { checkMaintenance } = require('./middleware/maintenance');
 
 const app = express();
 
@@ -91,6 +92,7 @@ app.get('/health', (req, res) => {
 });
 
 // ─── API Routes ───────────────────────────────────────────
+app.use(checkMaintenance);
 app.use('/api/auth', authRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/telegram/webhook', telegramWebhookRoutes);

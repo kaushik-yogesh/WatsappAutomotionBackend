@@ -4,6 +4,7 @@ const WhatsappAccount = require('../models/WhatsappAccount');
 const TelegramAccount = require('../models/TelegramAccount');
 const InstagramAccount = require('../models/InstagramAccount');
 const Agent = require('../models/Agent');
+const SystemSetting = require('../models/SystemSetting');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
 
@@ -189,6 +190,80 @@ exports.updateUser = async (req, res, next) => {
     res.status(200).json({
       status: 'success',
       data: { user }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get system health and resource usage
+ */
+exports.getSystemHealth = async (req, res, next) => {
+  try {
+    const uptime = process.uptime();
+    const memoryUsage = process.memoryUsage();
+    
+    res.status(200).json({
+      status: 'success',
+      data: {
+        uptime: Math.floor(uptime),
+        memory: {
+          heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+          heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+          rss: Math.round(memoryUsage.rss / 1024 / 1024)
+        },
+        platform: process.platform,
+        nodeVersion: process.version,
+        timestamp: new Date()
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get all system settings
+ */
+exports.getSystemSettings = async (req, res, next) => {
+  try {
+    let settings = await SystemSetting.find();
+    
+    // Initialize default settings if they don't exist
+    if (settings.length === 0) {
+      settings = await SystemSetting.create([
+        { key: 'maintenance_mode', value: false, description: 'Block all non-admin traffic' },
+        { key: 'registration_enabled', value: true, description: 'Allow new user signups' },
+        { key: 'ai_responses_enabled', value: true, description: 'Enable/Disable AI agent processing' }
+      ]);
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: { settings }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Update a system setting
+ */
+exports.updateSystemSetting = async (req, res, next) => {
+  try {
+    const { key, value } = req.body;
+    
+    const setting = await SystemSetting.findOneAndUpdate(
+      { key },
+      { value, updatedBy: req.user._id },
+      { new: true, upsert: true }
+    );
+
+    res.status(200).json({
+      status: 'success',
+      data: { setting }
     });
   } catch (err) {
     next(err);
