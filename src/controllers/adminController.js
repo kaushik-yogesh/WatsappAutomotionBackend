@@ -113,11 +113,18 @@ exports.getAllUsers = async (req, res, next) => {
         }
       },
       {
-        $project: {
-          password: 0,
+        $addFields: {
           whatsappCount: { $size: '$whatsapp' },
           telegramCount: { $size: '$telegram' },
           instagramCount: { $size: '$instagram' }
+        }
+      },
+      {
+        $project: {
+          password: 0,
+          whatsapp: 0,
+          telegram: 0,
+          instagram: 0
         }
       }
     ]);
