@@ -146,6 +146,7 @@ exports.forgotPassword = async (req, res, next) => {
 
     res.status(200).json({ status: 'success', message: 'If that email exists, a reset link has been sent.' });
   } catch (err) {
+    console.error('ForgotPassword Error:', err);
     next(err);
   }
 };
