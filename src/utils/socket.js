@@ -22,7 +22,15 @@ const initSocket = (server) => {
       }
       
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // We need the role here, so we fetch the user from DB (or we could include role in JWT)
+      const User = require('../models/User');
+      const user = await User.findById(decoded.id);
+      
+      if (!user) return next(new Error('User not found'));
+      
       socket.userId = decoded.id;
+      socket.userRole = user.role;
       next();
     } catch (err) {
       next(new Error('Authentication error'));
@@ -30,10 +38,16 @@ const initSocket = (server) => {
   });
 
   io.on('connection', (socket) => {
-    logger.info(`Socket connected: ${socket.id} for User: ${socket.userId}`);
+    logger.info(`Socket connected: ${socket.id} for User: ${socket.userId} (${socket.userRole})`);
     
     // Join a room for the specific user so we can emit to all their devices
     socket.join(`user_${socket.userId}`);
+
+    // If admin, join the admin room
+    if (socket.userRole === 'admin') {
+      socket.join('admin_room');
+      logger.info(`Admin joined admin_room: ${socket.userId}`);
+    }
 
     socket.on('disconnect', () => {
       logger.info(`Socket disconnected: ${socket.id}`);

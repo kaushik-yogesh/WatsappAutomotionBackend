@@ -196,6 +196,8 @@ exports.updateUser = async (req, res, next) => {
   }
 };
 
+const { getStats } = require('../middleware/healthMonitor');
+
 /**
  * Get system health and resource usage
  */
@@ -203,6 +205,7 @@ exports.getSystemHealth = async (req, res, next) => {
   try {
     const uptime = process.uptime();
     const memoryUsage = process.memoryUsage();
+    const monitorStats = getStats();
     
     res.status(200).json({
       status: 'success',
@@ -213,6 +216,7 @@ exports.getSystemHealth = async (req, res, next) => {
           heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024),
           rss: Math.round(memoryUsage.rss / 1024 / 1024)
         },
+        monitor: monitorStats,
         platform: process.platform,
         nodeVersion: process.version,
         timestamp: new Date()
@@ -235,7 +239,11 @@ exports.getSystemSettings = async (req, res, next) => {
       settings = await SystemSetting.create([
         { key: 'maintenance_mode', value: false, description: 'Block all non-admin traffic' },
         { key: 'registration_enabled', value: true, description: 'Allow new user signups' },
-        { key: 'ai_responses_enabled', value: true, description: 'Enable/Disable AI agent processing' }
+        { key: 'whatsapp_enabled', value: true, description: 'Enable/Disable WhatsApp Service' },
+        { key: 'telegram_enabled', value: true, description: 'Enable/Disable Telegram Service' },
+        { key: 'instagram_enabled', value: true, description: 'Enable/Disable Instagram Service' },
+        { key: 'billing_enabled', value: true, description: 'Enable/Disable Payments/Billing' },
+        { key: 'ai_enabled', value: true, description: 'Enable/Disable AI Responses' }
       ]);
     }
 

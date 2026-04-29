@@ -26,6 +26,7 @@ const socialHubRoutes = require('./routes/socialHub');
 const notificationRoutes = require('./routes/notifications');
 const adminRoutes = require('./routes/admin');
 const { checkMaintenance } = require('./middleware/maintenance');
+const { healthMonitor } = require('./middleware/healthMonitor');
 
 const app = express();
 
@@ -92,6 +93,7 @@ app.get('/health', (req, res) => {
 });
 
 // ─── API Routes ───────────────────────────────────────────
+app.use(healthMonitor);
 app.use(checkMaintenance);
 app.use('/api/auth', authRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
