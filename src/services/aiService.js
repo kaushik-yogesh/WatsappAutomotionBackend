@@ -3,12 +3,37 @@ const Anthropic = require('@anthropic-ai/sdk');
 const logger = require('../utils/logger');
 const AppError = require('../utils/AppError');
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const SystemSetting = require('../models/SystemSetting');
 
 const OPENAI_MODELS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
 const ANTHROPIC_MODELS = ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'];
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+let lastOpenaiKey = null;
+let lastAnthropicKey = null;
+let openaiClient = null;
+let anthropicClient = null;
+
+const getClients = async () => {
+  const settings = await SystemSetting.find({ 
+    key: { $in: ['openai_api_key', 'anthropic_api_key'] } 
+  });
+  
+  const openaiKey = settings.find(s => s.key === 'openai_api_key')?.value || process.env.OPENAI_API_KEY;
+  const anthropicKey = settings.find(s => s.key === 'anthropic_api_key')?.value || process.env.ANTHROPIC_API_KEY;
+
+  if (openaiKey && openaiKey !== lastOpenaiKey) {
+    openaiClient = new OpenAI({ apiKey: openaiKey });
+    lastOpenaiKey = openaiKey;
+  }
+  
+  if (anthropicKey && anthropicKey !== lastAnthropicKey) {
+    anthropicClient = new Anthropic({ apiKey: anthropicKey });
+    lastAnthropicKey = anthropicKey;
+  }
+
+  return { openai: openaiClient, anthropic: anthropicClient };
+};
 
 class AIService {
   // Build messages array from conversation history
@@ -77,6 +102,9 @@ IMPORTANT: Keep responses concise and relevant. Avoid long paragraphs. Use minim
   // Generate response using OpenAI
   static async generateOpenAI({ model = 'gpt-4o', messages, temperature = 0.7, maxTokens = 500 }) {
     try {
+      const { openai } = await getClients();
+      if (!openai) throw new Error('OpenAI client not initialized. Check API key.');
+
       const start = Date.now();
       const response = await openai.chat.completions.create({
         model,
@@ -103,6 +131,9 @@ IMPORTANT: Keep responses concise and relevant. Avoid long paragraphs. Use minim
   // Generate response using Anthropic Claude
   static async generateAnthropic({ model = 'claude-sonnet-4-6', messages, temperature = 0.7, maxTokens = 500 }) {
     try {
+      const { anthropic } = await getClients();
+      if (!anthropic) throw new Error('Anthropic client not initialized. Check API key.');
+
       const start = Date.now();
 
       // Anthropic expects system as separate param, not in messages
@@ -163,7 +194,16 @@ IMPORTANT: Keep responses concise and relevant. Avoid long paragraphs. Use minim
 
   // Main generate function - routes to correct provider
   static async generate(agent, conversationHistory, userMessage, platform = 'whatsapp') {
-    const messages = this.buildMessages(agent.systemPrompt, conversationHistory, userMessage, platform);
+    // Fetch global settings
+    const settings = await SystemSetting.find({ 
+      key: { $in: ['global_system_prompt', 'default_ai_model'] } 
+    });
+    
+    const globalPrompt = settings.find(s => s.key === 'global_system_prompt')?.value || '';
+    const defaultModel = settings.find(s => s.key === 'default_ai_model')?.value || 'gpt-4o-mini';
+
+    const fullSystemPrompt = `${globalPrompt}\n\n${agent.systemPrompt}`;
+    const messages = this.buildMessages(fullSystemPrompt, conversationHistory, userMessage, platform);
 
     try {
       if (agent.aiProvider === 'anthropic') {
