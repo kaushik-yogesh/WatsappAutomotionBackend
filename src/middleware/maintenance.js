@@ -6,8 +6,12 @@ const AppError = require('../utils/AppError');
  */
 const checkMaintenance = async (req, res, next) => {
   try {
-    // Skip maintenance check for admin routes or if the user is an admin
-    if (req.originalUrl.startsWith('/api/admin') || (req.user && req.user.role === 'admin')) {
+    // Skip maintenance check for admin routes, auth routes (so admin can log in/check status), or if the user is an admin
+    const isAdminRoute = req.originalUrl.startsWith('/api/admin');
+    const isAuthRoute = req.originalUrl.startsWith('/api/auth');
+    const isAdminUser = req.user && req.user.role === 'admin';
+
+    if (isAdminRoute || isAuthRoute || isAdminUser) {
       return next();
     }
 
