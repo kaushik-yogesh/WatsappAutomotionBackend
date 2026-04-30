@@ -3,29 +3,38 @@ const logger = require('../utils/logger');
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: false,
+  port: Number(process.env.SMTP_PORT) || 587,
+  secure: Number(process.env.SMTP_PORT) === 465, // true for 465, false for other ports
   auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  tls: {
+    // Do not fail on invalid certs (common with some SMTP providers)
+    rejectUnauthorized: false
+  }
 });
 
 const sendEmail = async ({ to, subject, html }) => {
   try {
     if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      logger.warn('SMTP credentials missing. Email not sent, but logging content for debug:');
-      logger.info(`To: ${to}, Subject: ${subject}`);
+      logger.warn('SMTP credentials missing (SMTP_USER/SMTP_PASS). Email not sent.');
+      logger.info(`Debug Email Content -> To: ${to}, Subject: ${subject}`);
       return;
     }
 
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: process.env.EMAIL_FROM || 'no-reply@whatsagent.com',
       to,
       subject,
       html,
     });
-    logger.info(`Email sent to ${to}`);
+    logger.info(`Email sent: ${info.messageId} to ${to}`);
   } catch (err) {
-    logger.error('Email send failed:', err.message);
-    throw new Error('Email delivery failed. Please contact support or check SMTP settings.');
+    logger.error('SMTP Error details:', {
+      message: err.message,
+      code: err.code,
+      command: err.command,
+      host: process.env.SMTP_HOST
+    });
+    throw new Error(`Email delivery failed: ${err.message}`);
   }
 };
 

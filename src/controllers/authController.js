@@ -147,8 +147,8 @@ exports.forgotPassword = async (req, res, next) => {
       logger.info(`Password reset email sent successfully to: ${user.email}`);
     } catch (emailErr) {
       logger.error(`Failed to send password reset email to ${user.email}:`, emailErr);
-      // We still return 200 for security, but we know it failed
-      return next(new AppError('There was an error sending the email. Try again later.', 500));
+      // Returning specific error to help debug Vercel issues
+      return next(new AppError(`Email delivery failed: ${emailErr.message}`, 500));
     }
 
     res.status(200).json({ status: 'success', message: 'If that email exists, a reset link has been sent.' });
