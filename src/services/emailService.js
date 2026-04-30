@@ -1,39 +1,32 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const logger = require('../utils/logger');
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: Number(process.env.SMTP_PORT) === 465, // true for 465, false for other ports
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  tls: {
-    // Do not fail on invalid certs (common with some SMTP providers)
-    rejectUnauthorized: false
-  }
-});
+// Initialize Resend with API Key
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const sendEmail = async ({ to, subject, html }) => {
   try {
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      logger.warn('SMTP credentials missing (SMTP_USER/SMTP_PASS). Email not sent.');
-      logger.info(`Debug Email Content -> To: ${to}, Subject: ${subject}`);
+    if (!resend) {
+      logger.warn('RESEND_API_KEY is missing. Email not sent, logging for debug:');
+      logger.info(`To: ${to}, Subject: ${subject}`);
       return;
     }
 
-    const info = await transporter.sendMail({
-      from: process.env.EMAIL_FROM || 'no-reply@whatsagent.com',
-      to,
-      subject,
-      html,
+    const { data, error } = await resend.emails.send({
+      from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
+      to: [to],
+      subject: subject,
+      html: html,
     });
-    logger.info(`Email sent: ${info.messageId} to ${to}`);
+
+    if (error) {
+      logger.error('Resend SMTP Error:', error);
+      throw new Error(error.message);
+    }
+
+    logger.info(`Email sent successfully via Resend. ID: ${data?.id}`);
   } catch (err) {
-    logger.error('SMTP Error details:', {
-      message: err.message,
-      code: err.code,
-      command: err.command,
-      host: process.env.SMTP_HOST
-    });
+    logger.error('Email send failed:', err.message);
     throw new Error(`Email delivery failed: ${err.message}`);
   }
 };
