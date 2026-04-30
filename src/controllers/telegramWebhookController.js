@@ -18,6 +18,10 @@ exports.receiveMessage = async (req, res) => {
 
     const { messageId, chatId, fromId, fromName, fromUsername, text, contact, timestamp } = parsed;
 
+    if (contact) {
+      logger.info(`Received contact share from ${fromId}: ${contact.phone_number}`);
+    }
+
     logger.info(`Incoming message from ${fromId} on bot ${botUsername}`);
 
     // 1. Find Telegram account
