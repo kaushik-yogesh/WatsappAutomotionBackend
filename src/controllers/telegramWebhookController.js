@@ -75,6 +75,14 @@ exports.receiveMessage = async (req, res) => {
 
       const tgService = new TelegramService(tgAccount.botToken);
       await tgService.sendTextMessage(chatId, "✅ Thank you! Your phone number has been verified. How can we assist you today?");
+
+      // Emit socket event to update UI in real-time
+      emitToUser(tgAccount.user.toString(), 'conversation_updated', {
+        conversationId: conversation._id,
+        messages: conversation.messages,
+        customerPhone: conversation.customerPhone, // Explicitly pass the new phone
+      });
+
       return;
     }
 
