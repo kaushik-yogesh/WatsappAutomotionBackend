@@ -243,7 +243,11 @@ exports.getSystemSettings = async (req, res, next) => {
         { key: 'telegram_enabled', value: true, description: 'Enable/Disable Telegram Service' },
         { key: 'instagram_enabled', value: true, description: 'Enable/Disable Instagram Service' },
         { key: 'billing_enabled', value: true, description: 'Enable/Disable Payments/Billing' },
-        { key: 'ai_enabled', value: true, description: 'Enable/Disable AI Responses' }
+        { key: 'ai_enabled', value: true, description: 'Enable/Disable AI Responses' },
+        { key: 'global_system_prompt', value: 'You are a helpful AI business assistant.', description: 'Base prompt for all agents' },
+        { key: 'openai_api_key', value: '', description: 'System-wide OpenAI API Key' },
+        { key: 'anthropic_api_key', value: '', description: 'System-wide Anthropic API Key' },
+        { key: 'default_ai_model', value: 'gpt-3.5-turbo', description: 'Fallback model for agents' }
       ]);
     }
 
