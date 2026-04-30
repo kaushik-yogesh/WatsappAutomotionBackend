@@ -235,11 +235,11 @@ exports.getSystemSettings = async (req, res, next) => {
     const defaultSettings = [
       { key: 'maintenance_mode', value: false, description: 'Block all non-admin traffic' },
       { key: 'registration_enabled', value: true, description: 'Allow new user signups' },
+      { key: 'billing_enabled', value: true, description: 'Enable/Disable Payments/Billing' },
       { key: 'whatsapp_enabled', value: true, description: 'Enable/Disable WhatsApp Service' },
       { key: 'telegram_enabled', value: true, description: 'Enable/Disable Telegram Service' },
       { key: 'instagram_enabled', value: true, description: 'Enable/Disable Instagram Service' },
-      { key: 'billing_enabled', value: true, description: 'Enable/Disable Payments/Billing' },
-      { key: 'ai_enabled', value: true, description: 'Enable/Disable AI Responses' },
+      { key: 'ai_responses_enabled', value: true, description: 'Enable/Disable AI Responses' },
       { key: 'global_system_prompt', value: 'You are a helpful AI business assistant.', description: 'Base prompt for all agents' },
       { key: 'openai_api_key', value: '', description: 'System-wide OpenAI API Key' },
       { key: 'anthropic_api_key', value: '', description: 'System-wide Anthropic API Key' },
