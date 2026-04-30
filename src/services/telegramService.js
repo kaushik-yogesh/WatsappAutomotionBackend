@@ -7,11 +7,12 @@ class TelegramService {
     this.apiUrl = `https://api.telegram.org/bot${botToken}`;
   }
 
-  async sendTextMessage(chatId, text) {
+  async sendTextMessage(chatId, text, options = {}) {
     try {
       const response = await axios.post(`${this.apiUrl}/sendMessage`, {
         chat_id: chatId,
         text: text,
+        ...options
       });
       return response.data;
     } catch (error) {
@@ -61,6 +62,7 @@ class TelegramService {
         fromName: body.message.from.first_name + (body.message.from.last_name ? ' ' + body.message.from.last_name : ''),
         fromUsername: body.message.from.username,
         text: body.message.text,
+        contact: body.message.contact,
         timestamp: body.message.date,
       };
     }

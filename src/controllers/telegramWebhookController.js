@@ -14,9 +14,9 @@ exports.receiveMessage = async (req, res) => {
   try {
     const { botUsername } = req.params;
     const parsed = TelegramService.parseWebhookMessage(req.body);
-    if (!parsed || !parsed.text) return; // Skip non-text for now
+    if (!parsed || (!parsed.text && !parsed.contact)) return;
 
-    const { messageId, chatId, fromId, fromName, fromUsername, text, timestamp } = parsed;
+    const { messageId, chatId, fromId, fromName, fromUsername, text, contact, timestamp } = parsed;
 
     logger.info(`Incoming message from ${fromId} on bot ${botUsername}`);
 
@@ -43,7 +43,78 @@ exports.receiveMessage = async (req, res) => {
       return;
     }
 
-    // 3. Find or create conversation
+    // 3. Handle shared contact
+    if (contact) {
+      let conversation = await Conversation.findOne({
+        telegramAccount: tgAccount._id,
+        customerTgId: fromId.toString(),
+      }).sort({ createdAt: -1 });
+
+      if (!conversation) {
+        conversation = await Conversation.create({
+          user: tgAccount.user,
+          agent: agent._id,
+          telegramAccount: tgAccount._id,
+          platform: 'telegram',
+          customerTgId: fromId.toString(),
+          customerUsername: fromUsername,
+          customerName: fromName,
+          customerPhone: contact.phone_number,
+          status: 'active',
+          lastMessageAt: new Date(),
+        });
+      } else {
+        conversation.customerPhone = contact.phone_number;
+        conversation.messages.push({
+          role: 'system',
+          content: `System: Customer shared phone number: ${contact.phone_number}`,
+          timestamp: new Date(),
+        });
+        await conversation.save();
+      }
+
+      const tgService = new TelegramService(tgAccount.botToken);
+      await tgService.sendTextMessage(chatId, "✅ Thank you! Your phone number has been verified. How can we assist you today?");
+      return;
+    }
+
+    // 4. Handle /start command
+    if (text === '/start') {
+      let conversation = await Conversation.findOne({
+        telegramAccount: tgAccount._id,
+        customerTgId: fromId.toString(),
+      }).sort({ createdAt: -1 });
+
+      if (!conversation) {
+        conversation = await Conversation.create({
+          user: tgAccount.user,
+          agent: agent._id,
+          telegramAccount: tgAccount._id,
+          platform: 'telegram',
+          customerTgId: fromId.toString(),
+          customerUsername: fromUsername,
+          customerName: fromName,
+          status: 'active',
+          lastMessageAt: new Date(),
+        });
+      } else if (conversation.status === 'closed') {
+        conversation.status = 'active';
+        await conversation.save();
+      }
+
+      const tgService = new TelegramService(tgAccount.botToken);
+      const welcomeMsg = agent.greetingMessage || "Welcome! Please share your contact to continue.";
+      await tgService.sendTextMessage(chatId, welcomeMsg, {
+        reply_markup: {
+          keyboard: [[{ text: "📱 Share Mobile Number", request_contact: true }]],
+          resize_keyboard: true,
+          one_time_keyboard: true
+        }
+      });
+      return;
+    }
+
+    // 5. Find or create conversation for general messages
     let conversation = await Conversation.findOne({
       telegramAccount: tgAccount._id,
       customerTgId: fromId.toString(),
@@ -62,7 +133,7 @@ exports.receiveMessage = async (req, res) => {
         lastMessageAt: new Date(),
       });
       
-      // Send greeting if configured
+      // Send greeting if configured (and not handled by /start)
       if (agent.greetingMessage) {
         const tgService = new TelegramService(tgAccount.botToken);
         await tgService.sendTextMessage(chatId, agent.greetingMessage);
