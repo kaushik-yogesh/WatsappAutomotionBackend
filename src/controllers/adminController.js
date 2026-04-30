@@ -232,23 +232,29 @@ exports.getSystemHealth = async (req, res, next) => {
  */
 exports.getSystemSettings = async (req, res, next) => {
   try {
+    const defaultSettings = [
+      { key: 'maintenance_mode', value: false, description: 'Block all non-admin traffic' },
+      { key: 'registration_enabled', value: true, description: 'Allow new user signups' },
+      { key: 'whatsapp_enabled', value: true, description: 'Enable/Disable WhatsApp Service' },
+      { key: 'telegram_enabled', value: true, description: 'Enable/Disable Telegram Service' },
+      { key: 'instagram_enabled', value: true, description: 'Enable/Disable Instagram Service' },
+      { key: 'billing_enabled', value: true, description: 'Enable/Disable Payments/Billing' },
+      { key: 'ai_enabled', value: true, description: 'Enable/Disable AI Responses' },
+      { key: 'global_system_prompt', value: 'You are a helpful AI business assistant.', description: 'Base prompt for all agents' },
+      { key: 'openai_api_key', value: '', description: 'System-wide OpenAI API Key' },
+      { key: 'anthropic_api_key', value: '', description: 'System-wide Anthropic API Key' },
+      { key: 'default_ai_model', value: 'gpt-3.5-turbo', description: 'Fallback model for agents' }
+    ];
+
     let settings = await SystemSetting.find();
     
-    // Initialize default settings if they don't exist
-    if (settings.length === 0) {
-      settings = await SystemSetting.create([
-        { key: 'maintenance_mode', value: false, description: 'Block all non-admin traffic' },
-        { key: 'registration_enabled', value: true, description: 'Allow new user signups' },
-        { key: 'whatsapp_enabled', value: true, description: 'Enable/Disable WhatsApp Service' },
-        { key: 'telegram_enabled', value: true, description: 'Enable/Disable Telegram Service' },
-        { key: 'instagram_enabled', value: true, description: 'Enable/Disable Instagram Service' },
-        { key: 'billing_enabled', value: true, description: 'Enable/Disable Payments/Billing' },
-        { key: 'ai_enabled', value: true, description: 'Enable/Disable AI Responses' },
-        { key: 'global_system_prompt', value: 'You are a helpful AI business assistant.', description: 'Base prompt for all agents' },
-        { key: 'openai_api_key', value: '', description: 'System-wide OpenAI API Key' },
-        { key: 'anthropic_api_key', value: '', description: 'System-wide Anthropic API Key' },
-        { key: 'default_ai_model', value: 'gpt-3.5-turbo', description: 'Fallback model for agents' }
-      ]);
+    // Check if any default settings are missing and add them
+    const existingKeys = settings.map(s => s.key);
+    const missingSettings = defaultSettings.filter(ds => !existingKeys.includes(ds.key));
+
+    if (missingSettings.length > 0) {
+      const newSettings = await SystemSetting.create(missingSettings);
+      settings = [...settings, ...newSettings];
     }
 
     res.status(200).json({
