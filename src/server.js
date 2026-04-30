@@ -39,10 +39,25 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || 'http://localhost:3000',
-    'https://automation.poojatrendhub.com'
-  ],
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      process.env.FRONTEND_URL,
+      'http://localhost:3000',
+      'https://automation.poojatrendhub.com'
+    ];
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    const isAllowed = allowedOrigins.some(ao => ao && ao.startsWith(origin)) || 
+                      origin.endsWith('.vercel.app');
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      logger.warn(`CORS blocked for origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
