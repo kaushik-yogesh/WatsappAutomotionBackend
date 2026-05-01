@@ -13,32 +13,44 @@ class FacebookService {
    * Publish a post to the Facebook Page feed
    * @param {string} message - The caption/text of the post
    * @param {string[]} mediaUrls - Array of media URLs
+   * @param {string} type - 'post', 'reel', 'story'
    */
-  async publishPost(message, mediaUrls = []) {
+  async publishPost(message, mediaUrls = [], type = 'post') {
     try {
       const mediaUrl = mediaUrls[0];
-      const isVideo = mediaUrl && mediaUrl.match(/\.(mp4|mov|avi|wmv)$/i);
+      
+      // Robust video detection
+      const isVideo = mediaUrl && (
+        mediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)/i) || 
+        type === 'reel' || 
+        (typeof mediaUrl === 'string' && mediaUrl.includes('/video/upload/'))
+      );
 
       let endpoint = `${this.baseUrl}/${this.pageId}/feed`;
       let data = { message };
 
       if (mediaUrl && mediaUrl !== 'placeholder_media_url_for_now') {
         if (isVideo) {
+          // Posting a video
           endpoint = `${this.baseUrl}/${this.pageId}/videos`;
           data = {
             description: message,
-            file_url: mediaUrl // Use file_url for public URLs
+            file_url: mediaUrl
           };
+          logger.info(`Publishing video to Facebook: ${mediaUrl}`);
         } else {
+          // Posting a photo
           endpoint = `${this.baseUrl}/${this.pageId}/photos`;
           data = {
             caption: message,
             url: mediaUrl
           };
+          logger.info(`Publishing photo to Facebook: ${mediaUrl}`);
         }
+      } else {
+        logger.info(`Publishing text-only post to Facebook`);
       }
 
-      logger.info(`Publishing to Facebook... Endpoint: ${endpoint}`);
       const response = await axios.post(
         endpoint,
         data,
@@ -50,7 +62,8 @@ class FacebookService {
       return {
         success: true,
         id: response.data.id || response.data.post_id,
-        platform: 'facebook'
+        platform: 'facebook',
+        type: isVideo ? 'video' : (mediaUrl ? 'photo' : 'text')
       };
     } catch (error) {
       const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;

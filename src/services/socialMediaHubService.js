@@ -29,7 +29,7 @@ class SocialMediaHubService {
             break;
           case 'facebook':
             const fbService = new FacebookService(p.accessToken, p.pageId);
-            result = await fbService.publishPost(caption, mediaUrls);
+            result = await fbService.publishPost(caption, mediaUrls, type);
             break;
           case 'telegram':
             // Add Telegram posting logic here in the future
