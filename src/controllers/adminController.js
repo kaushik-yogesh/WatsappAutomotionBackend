@@ -150,12 +150,15 @@ exports.getUserDetails = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
     if (!user) return next(new AppError('User not found', 404));
+    
+    const Payment = require('../models/Payment');
 
-    const [whatsapp, telegram, instagram, agents] = await Promise.all([
+    const [whatsapp, telegram, instagram, agents, payments] = await Promise.all([
       WhatsappAccount.find({ user: user._id }),
       TelegramAccount.find({ user: user._id }),
       InstagramAccount.find({ user: user._id }),
-      Agent.find({ user: user._id })
+      Agent.find({ user: user._id }),
+      Payment.find({ user: user._id }).sort({ createdAt: -1 }).limit(10)
     ]);
 
     res.status(200).json({
@@ -163,7 +166,8 @@ exports.getUserDetails = async (req, res, next) => {
       data: {
         user,
         accounts: { whatsapp, telegram, instagram },
-        agents
+        agents,
+        payments
       }
     });
   } catch (err) {
