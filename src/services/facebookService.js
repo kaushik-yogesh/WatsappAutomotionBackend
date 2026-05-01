@@ -12,22 +12,33 @@ class FacebookService {
   /**
    * Publish a post to the Facebook Page feed
    * @param {string} message - The caption/text of the post
-   * @param {string[]} mediaUrls - Array of media URLs (for now handles first image if present)
+   * @param {string[]} mediaUrls - Array of media URLs
    */
   async publishPost(message, mediaUrls = []) {
     try {
+      const mediaUrl = mediaUrls[0];
+      const isVideo = mediaUrl && mediaUrl.match(/\.(mp4|mov|avi|wmv)$/i);
+
       let endpoint = `${this.baseUrl}/${this.pageId}/feed`;
       let data = { message };
 
-      // If there's an image, use the photos endpoint instead
-      if (mediaUrls && mediaUrls.length > 0 && mediaUrls[0] !== 'placeholder_media_url_for_now') {
-        endpoint = `${this.baseUrl}/${this.pageId}/photos`;
-        data = {
-          caption: message,
-          url: mediaUrls[0]
-        };
+      if (mediaUrl && mediaUrl !== 'placeholder_media_url_for_now') {
+        if (isVideo) {
+          endpoint = `${this.baseUrl}/${this.pageId}/videos`;
+          data = {
+            description: message,
+            file_url: mediaUrl // Use file_url for public URLs
+          };
+        } else {
+          endpoint = `${this.baseUrl}/${this.pageId}/photos`;
+          data = {
+            caption: message,
+            url: mediaUrl
+          };
+        }
       }
 
+      logger.info(`Publishing to Facebook... Endpoint: ${endpoint}`);
       const response = await axios.post(
         endpoint,
         data,

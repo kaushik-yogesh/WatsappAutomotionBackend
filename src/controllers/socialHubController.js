@@ -3,6 +3,7 @@ const InstagramAccount = require('../models/InstagramAccount');
 const WhatsappAccount = require('../models/WhatsappAccount');
 const TelegramAccount = require('../models/TelegramAccount');
 const SocialMediaHubService = require('../services/socialMediaHubService');
+const CloudinaryService = require('../services/cloudinaryService');
 const logger = require('../utils/logger');
 
 // ─── Get Connected Accounts ────────────────────────────────────────────────
@@ -10,7 +11,6 @@ exports.getConnectedAccounts = async (req, res, next) => {
   try {
     const userId = req.user._id;
 
-    // Fetch from all schemas
     const igAccounts = await InstagramAccount.find({ user: userId });
     const waAccounts = await WhatsappAccount.find({ user: userId });
     const tgAccounts = await TelegramAccount.find({ user: userId });
@@ -19,7 +19,6 @@ exports.getConnectedAccounts = async (req, res, next) => {
 
     igAccounts.forEach(acc => {
       if (acc.status === 'connected') {
-        // Instagram Account
         accounts.push({
           id: acc._id,
           platform: 'instagram',
@@ -29,9 +28,8 @@ exports.getConnectedAccounts = async (req, res, next) => {
           modelId: acc._id
         });
 
-        // Associated Facebook Page (since Instagram Business requires a FB Page)
         accounts.push({
-          id: `fb_${acc._id}`, // Virtual ID to distinguish from IG
+          id: `fb_${acc._id}`,
           platform: 'facebook',
           name: acc.pageName || 'Facebook Page',
           type: 'Business Page',
@@ -81,14 +79,17 @@ exports.publishContent = async (req, res, next) => {
   try {
     const { type, caption, mediaUrls, platforms } = req.body;
     
+    logger.info(`Publishing request: Type=${type}, Caption=${caption?.substring(0, 20)}..., MediaCount=${mediaUrls?.length}, PlatformCount=${platforms?.length}`);
+    if (mediaUrls) {
+      mediaUrls.forEach((url, i) => logger.info(`Media URL [${i}]: ${url?.substring(0, 50)}${url?.length > 50 ? '...' : ''}`));
+    }
+
     if (!platforms || !Array.isArray(platforms) || platforms.length === 0) {
       return next(new AppError('Please select at least one platform', 400));
     }
 
-    // Resolve credentials for each platform
     const platformConfigs = [];
     for (const p of platforms) {
-      // For FB virtual ID, we use the modelId which is the IG account ID
       const targetModelId = p.platform === 'facebook' && typeof p.id === 'string' && p.id.startsWith('fb_') 
         ? p.id.replace('fb_', '') 
         : p.id;
@@ -108,7 +109,6 @@ exports.publishContent = async (req, res, next) => {
           });
         }
       } else {
-        // Placeholder for other platforms (Telegram, WhatsApp)
         platformConfigs.push({ ...p });
       }
     }
@@ -139,7 +139,6 @@ exports.updateProfile = async (req, res, next) => {
       return next(new AppError('Please select at least one platform', 400));
     }
 
-    // Resolve credentials
     const platformConfigs = [];
     for (const p of platforms) {
       const targetModelId = p.platform === 'facebook' && typeof p.id === 'string' && p.id.startsWith('fb_') 
@@ -175,6 +174,30 @@ exports.updateProfile = async (req, res, next) => {
       status: 'success',
       message: 'Profile update process completed',
       results
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Upload Media ─────────────────────────────────────────────────────────
+exports.uploadMedia = async (req, res, next) => {
+  try {
+    if (!req.files || Object.keys(req.files).length === 0) {
+      return next(new AppError('No files were uploaded', 400));
+    }
+
+    const file = req.files.file;
+    logger.info(`Uploading file to Cloudinary: ${file.name} (${file.size} bytes)`);
+    
+    const result = await CloudinaryService.upload(file.tempFilePath, {
+      resource_type: 'auto',
+      folder: 'social_hub'
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: result
     });
   } catch (err) {
     next(err);

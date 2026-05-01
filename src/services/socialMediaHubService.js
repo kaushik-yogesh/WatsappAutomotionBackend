@@ -25,7 +25,7 @@ class SocialMediaHubService {
         switch (p.platform) {
           case 'instagram':
             const igService = new InstagramService(p.accessToken, p.pageId, p.igAccountId);
-            result = await igService.publishPost(caption, mediaUrls);
+            result = await igService.publishPost({ caption, mediaUrls, type });
             break;
           case 'facebook':
             const fbService = new FacebookService(p.accessToken, p.pageId);

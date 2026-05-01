@@ -9,5 +9,6 @@ router.use(protect);
 router.get('/accounts', socialHubController.getConnectedAccounts);
 router.post('/publish', socialHubController.publishContent);
 router.post('/profile', socialHubController.updateProfile);
+router.post('/upload', socialHubController.uploadMedia);
 
 module.exports = router;
