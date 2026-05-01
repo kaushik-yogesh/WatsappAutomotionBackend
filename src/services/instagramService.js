@@ -31,22 +31,20 @@ class InstagramService {
         throw new Error('Instagram Account ID is missing');
       }
 
-      if (!mediaUrls || mediaUrls.length === 0) {
-        throw new Error('No media URLs provided');
+      // Filter and validate media URLs
+      const validMediaUrls = (mediaUrls || []).filter(url => url && typeof url === 'string' && url.trim() !== '' && url !== 'placeholder_media_url_for_now');
+      
+      if (validMediaUrls.length === 0) {
+        throw new Error('Instagram requires at least one valid image or video URL for publishing.');
       }
 
-      // Handle Carousel
-      if (type === 'carousel' || mediaUrls.length > 1) {
-        return await this._publishCarousel(caption, mediaUrls);
+      // Handle Carousel (Multiple media items)
+      if (type === 'carousel' || validMediaUrls.length > 1) {
+        return await this._publishCarousel(caption, validMediaUrls);
       }
 
-      const mediaUrl = mediaUrls[0];
-      if (!mediaUrl || mediaUrl === 'placeholder_media_url_for_now') {
-        logger.info('Skipping actual Instagram API call due to placeholder media');
-        return { success: true, message: 'Instagram post simulated', platform: 'instagram' };
-      }
-
-      const isVideo = mediaUrl.match(/\.(mp4|mov|avi|wmv)$/i) || type === 'reel';
+      const mediaUrl = validMediaUrls[0];
+      const isVideo = mediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm)/i) || type === 'reel';
       
       // 1. Create Media Container
       const containerData = {
