@@ -86,6 +86,41 @@ class FacebookService {
       throw error;
     }
   }
+
+  /**
+   * Get recent posts for the Facebook Page
+   */
+  async getMedia() {
+    try {
+      const response = await axios.get(`${this.baseUrl}/${this.pageId}/feed`, {
+        params: {
+          fields: 'id,message,full_picture,permalink_url,created_time,type',
+          access_token: this.accessToken
+        }
+      });
+      return response.data.data;
+    } catch (error) {
+      const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      logger.error(`Facebook getMedia error: ${errDetail}`);
+      throw new Error(`Facebook API error: ${errDetail}`);
+    }
+  }
+
+  /**
+   * Delete a post
+   */
+  async deleteMedia(postId) {
+    try {
+      const response = await axios.delete(`${this.baseUrl}/${postId}`, {
+        params: { access_token: this.accessToken }
+      });
+      return response.data;
+    } catch (error) {
+      const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      logger.error(`Facebook deleteMedia error: ${errDetail}`);
+      throw new Error(`Facebook API error: ${errDetail}`);
+    }
+  }
 }
 
 module.exports = FacebookService;

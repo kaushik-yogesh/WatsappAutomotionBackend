@@ -82,6 +82,75 @@ class SocialMediaHubService {
 
     return Promise.all(promises);
   }
+
+  /**
+   * Get feeds from multiple platforms
+   */
+  static async getFeed(platforms) {
+    const promises = platforms.map(async (p) => {
+      try {
+        let posts = [];
+        switch (p.platform) {
+          case 'instagram':
+            const igService = new InstagramService(p.accessToken, p.pageId, p.igAccountId);
+            posts = await igService.getMedia();
+            return posts.map(post => ({
+              id: post.id,
+              caption: post.caption,
+              mediaUrl: post.media_url,
+              permalink: post.permalink,
+              timestamp: post.timestamp,
+              type: post.media_type,
+              platform: 'instagram',
+              accountId: p.id
+            }));
+          case 'facebook':
+            const fbService = new FacebookService(p.accessToken, p.pageId);
+            posts = await fbService.getMedia();
+            return posts.map(post => ({
+              id: post.id,
+              caption: post.message,
+              mediaUrl: post.full_picture,
+              permalink: post.permalink_url,
+              timestamp: post.created_time,
+              type: post.type,
+              platform: 'facebook',
+              accountId: p.id
+            }));
+          default:
+            return [];
+        }
+      } catch (err) {
+        logger.error(`Error getting feed from ${p.platform}: ${err.message}`);
+        return [];
+      }
+    });
+
+    const results = await Promise.all(promises);
+    return results.flat().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+
+  /**
+   * Delete a post from a platform
+   */
+  static async deletePost(params) {
+    const { platform, postId, accessToken, pageId, igAccountId } = params;
+    try {
+      switch (platform) {
+        case 'instagram':
+          const igService = new InstagramService(accessToken, pageId, igAccountId);
+          return await igService.deleteMedia(postId);
+        case 'facebook':
+          const fbService = new FacebookService(accessToken, pageId);
+          return await fbService.deleteMedia(postId);
+        default:
+          throw new Error(`Deletion not supported for ${platform}`);
+      }
+    } catch (err) {
+      logger.error(`Error deleting post from ${platform}: ${err.message}`);
+      throw err;
+    }
+  }
 }
 
 module.exports = SocialMediaHubService;

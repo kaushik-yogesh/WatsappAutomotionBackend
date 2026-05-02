@@ -10,5 +10,7 @@ router.get('/accounts', socialHubController.getConnectedAccounts);
 router.post('/publish', socialHubController.publishContent);
 router.post('/profile', socialHubController.updateProfile);
 router.post('/upload', socialHubController.uploadMedia);
+router.get('/feed', socialHubController.getFeed);
+router.post('/delete-post', socialHubController.deletePost);
 
 module.exports = router;

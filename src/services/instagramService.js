@@ -276,6 +276,48 @@ class InstagramService {
       return null;
     }
   }
+
+  /**
+   * Get recent media for the Instagram Business Account
+   */
+  async getMedia() {
+    try {
+      const response = await axios.get(`${this.baseUrl}/${this.igAccountId}/media`, {
+        params: {
+          fields: 'id,caption,media_type,media_url,permalink,thumbnail_url,timestamp',
+          access_token: this.accessToken
+        }
+      });
+      return response.data.data;
+    } catch (error) {
+      const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      logger.error(`Instagram getMedia error: ${errDetail}`);
+      throw new Error(`Instagram API error: ${errDetail}`);
+    }
+  }
+
+  /**
+   * Delete a media item
+   */
+  async deleteMedia(mediaId) {
+    try {
+      // Instagram Graph API doesn't support deleting media directly via API for business accounts easily
+      // However, for some cases it might work if the app has the right permissions.
+      // But usually, it's not supported for business accounts via Graph API.
+      // Wait, let's check. Actually, it is NOT supported.
+      // "Instagram media cannot be deleted via the API."
+      // BUT, we can try. Some newer versions might have it or for certain types.
+      // Actually, standard Instagram Graph API DOES NOT allow deletion.
+      // I will implement it as a "not supported" message or try and catch.
+      
+      // Let's assume for this SaaS we want to TRY if possible or at least provide the placeholder.
+      // NOTE: Facebook posts CAN be deleted.
+      
+      throw new Error('Instagram does not allow deleting posts via API. Please delete it directly from the Instagram app.');
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 
 module.exports = InstagramService;

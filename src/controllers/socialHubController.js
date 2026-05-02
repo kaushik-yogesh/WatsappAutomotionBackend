@@ -203,3 +203,75 @@ exports.uploadMedia = async (req, res, next) => {
     next(err);
   }
 };
+
+// ─── Get Feed ─────────────────────────────────────────────────────────────
+exports.getFeed = async (req, res, next) => {
+  try {
+    const igAccounts = await InstagramAccount.find({ user: req.user._id })
+      .select('+pageAccessToken +pageId +igAccountId');
+    
+    const platformConfigs = [];
+    igAccounts.forEach(acc => {
+      if (acc.status === 'connected') {
+        platformConfigs.push({
+          id: acc._id,
+          platform: 'instagram',
+          accessToken: acc.pageAccessToken,
+          pageId: acc.pageId,
+          igAccountId: acc.igAccountId
+        });
+
+        platformConfigs.push({
+          id: `fb_${acc._id}`,
+          platform: 'facebook',
+          accessToken: acc.pageAccessToken,
+          pageId: acc.pageId
+        });
+      }
+    });
+
+    const feed = await SocialMediaHubService.getFeed(platformConfigs);
+
+    res.status(200).json({
+      status: 'success',
+      data: feed
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Delete Post ──────────────────────────────────────────────────────────
+exports.deletePost = async (req, res, next) => {
+  try {
+    const { platform, postId, accountId } = req.body;
+
+    if (!platform || !postId || !accountId) {
+      return next(new AppError('platform, postId, and accountId are required', 400));
+    }
+
+    const targetModelId = platform === 'facebook' && typeof accountId === 'string' && accountId.startsWith('fb_') 
+      ? accountId.replace('fb_', '') 
+      : accountId;
+
+    const acc = await InstagramAccount.findOne({ _id: targetModelId, user: req.user._id })
+      .select('+pageAccessToken +pageId +igAccountId');
+
+    if (!acc) return next(new AppError('Account not found', 404));
+
+    await SocialMediaHubService.deletePost({
+      platform,
+      postId,
+      accessToken: acc.pageAccessToken,
+      pageId: acc.pageId,
+      igAccountId: acc.igAccountId
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Post deleted successfully'
+    });
+  } catch (err) {
+    next(err);
+  }
+};
