@@ -107,16 +107,24 @@ class SocialMediaHubService {
           case 'facebook':
             const fbService = new FacebookService(p.accessToken, p.pageId);
             posts = await fbService.getMedia();
-            return posts.map(post => ({
-              id: post.id,
-              caption: post.message,
-              mediaUrl: post.full_picture,
-              permalink: post.permalink_url,
-              timestamp: post.created_time,
-              type: post.type,
-              platform: 'facebook',
-              accountId: p.id
-            }));
+            return posts.map(post => {
+              // Extract media URL from attachments if available
+              let mediaUrl = null;
+              if (post.attachments && post.attachments.data && post.attachments.data.length > 0) {
+                mediaUrl = post.attachments.data[0].media?.image?.src || post.attachments.data[0].url;
+              }
+
+              return {
+                id: post.id,
+                caption: post.message,
+                mediaUrl: mediaUrl,
+                permalink: post.permalink_url,
+                timestamp: post.created_time,
+                type: post.type,
+                platform: 'facebook',
+                accountId: p.id
+              };
+            });
           default:
             return [];
         }
