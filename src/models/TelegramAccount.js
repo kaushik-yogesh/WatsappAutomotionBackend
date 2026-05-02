@@ -19,6 +19,10 @@ const telegramAccountSchema = new mongoose.Schema({
   botName: {
     type: String,
   },
+  defaultChatId: {
+    type: String,
+    default: '',
+  },
   // Connection status
   status: {
     type: String,

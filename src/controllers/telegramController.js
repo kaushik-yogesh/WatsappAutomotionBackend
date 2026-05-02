@@ -4,7 +4,7 @@ const TelegramService = require('../services/telegramService');
 
 exports.connectAccount = async (req, res, next) => {
   try {
-    const { botToken } = req.body;
+    const { botToken, defaultChatId } = req.body;
     if (!botToken) return next(new AppError('Bot Token is required', 400));
 
     // Verify token with Telegram API
@@ -31,6 +31,7 @@ exports.connectAccount = async (req, res, next) => {
       }
       account.botToken = botToken;
       account.botName = first_name;
+      account.defaultChatId = defaultChatId || account.defaultChatId || '';
       account.status = 'connected';
       await account.save();
     } else {
@@ -39,6 +40,7 @@ exports.connectAccount = async (req, res, next) => {
         botToken,
         botUsername: username,
         botName: first_name,
+        defaultChatId: defaultChatId || '',
         status: 'connected',
       });
     }

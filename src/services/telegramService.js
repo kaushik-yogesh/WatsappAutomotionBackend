@@ -21,6 +21,47 @@ class TelegramService {
     }
   }
 
+  async sendPhoto(chatId, photoUrl, caption = '') {
+    try {
+      const response = await axios.post(`${this.apiUrl}/sendPhoto`, {
+        chat_id: chatId,
+        photo: photoUrl,
+        caption,
+      });
+      return response.data;
+    } catch (error) {
+      logger.error('Error sending Telegram photo:', error.response?.data || error.message);
+      throw error;
+    }
+  }
+
+  async sendVideo(chatId, videoUrl, caption = '') {
+    try {
+      const response = await axios.post(`${this.apiUrl}/sendVideo`, {
+        chat_id: chatId,
+        video: videoUrl,
+        caption,
+      });
+      return response.data;
+    } catch (error) {
+      logger.error('Error sending Telegram video:', error.response?.data || error.message);
+      throw error;
+    }
+  }
+
+  async sendMediaGroup(chatId, media = []) {
+    try {
+      const response = await axios.post(`${this.apiUrl}/sendMediaGroup`, {
+        chat_id: chatId,
+        media,
+      });
+      return response.data;
+    } catch (error) {
+      logger.error('Error sending Telegram media group:', error.response?.data || error.message);
+      throw error;
+    }
+  }
+
   async setWebhook(url) {
     try {
       const response = await axios.post(`${this.apiUrl}/setWebhook`, {

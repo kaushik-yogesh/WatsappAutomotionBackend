@@ -143,6 +143,7 @@ app.all('*', (req, res, next) => {
 app.use(errorHandler);
 
 const { initSocket } = require('./utils/socket');
+const { startSocialPostScheduler } = require('./services/socialPostScheduler');
 
 // ─── Start Server ─────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
@@ -152,6 +153,7 @@ const server = app.listen(PORT, () => {
 
 // Initialize Socket.io
 initSocket(server);
+startSocialPostScheduler();
 
 // Graceful shutdown
 process.on('unhandledRejection', (err) => {
