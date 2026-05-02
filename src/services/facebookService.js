@@ -92,10 +92,10 @@ class FacebookService {
    */
   async getMedia() {
     try {
-      // Using attachments instead of full_picture to avoid deprecation errors in newer API versions
+      // Using a minimal set of fields to avoid 'deprecate_post_aggregated_fields_for_attachement' error
       const response = await axios.get(`${this.baseUrl}/${this.pageId}/feed`, {
         params: {
-          fields: 'id,message,attachments{media,type,url},permalink_url,created_time,type',
+          fields: 'id,message,attachments,permalink_url,created_time',
           access_token: this.accessToken
         }
       });

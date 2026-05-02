@@ -108,10 +108,13 @@ class SocialMediaHubService {
             const fbService = new FacebookService(p.accessToken, p.pageId);
             posts = await fbService.getMedia();
             return posts.map(post => {
-              // Extract media URL from attachments if available
+              // Extract media URL and type from attachments if available
               let mediaUrl = null;
+              let type = post.type;
               if (post.attachments && post.attachments.data && post.attachments.data.length > 0) {
-                mediaUrl = post.attachments.data[0].media?.image?.src || post.attachments.data[0].url;
+                const attachment = post.attachments.data[0];
+                mediaUrl = attachment.media?.image?.src || attachment.url;
+                if (!type) type = attachment.type;
               }
 
               return {
@@ -120,7 +123,7 @@ class SocialMediaHubService {
                 mediaUrl: mediaUrl,
                 permalink: post.permalink_url,
                 timestamp: post.created_time,
-                type: post.type,
+                type: type,
                 platform: 'facebook',
                 accountId: p.id
               };
