@@ -150,7 +150,7 @@ exports.publishContent = async (req, res, next) => {
 
 exports.validatePost = async (req, res, next) => {
   try {
-    const { caption = '', mediaUrls = [], hashtags = [], ctaText = '', link = '', platforms = [] } = req.body;
+    const { caption = '', mediaUrls = [], hashtags = [], ctaText = '', link = '', type = 'post', platforms = [] } = req.body;
     const platformConfigs = await SocialPostOrchestratorService.buildPlatformConfigs(req.user._id, platforms);
     const data = SocialPostOrchestratorService.validateCompatibility({
       text: caption,
@@ -158,6 +158,7 @@ exports.validatePost = async (req, res, next) => {
       hashtags,
       ctaText,
       link,
+      type,
       platforms: platformConfigs,
     });
     res.status(200).json({ status: 'success', data });

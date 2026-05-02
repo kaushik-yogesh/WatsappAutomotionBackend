@@ -70,7 +70,7 @@ class SocialPostOrchestratorService {
     return configs;
   }
 
-  static validateCompatibility({ text = '', mediaUrls = [], hashtags = [], ctaText = '', link = '', platforms = [] }) {
+  static validateCompatibility({ text = '', mediaUrls = [], hashtags = [], ctaText = '', link = '', type = 'post', platforms = [] }) {
     const warnings = [];
     const requiredFixes = [];
     const normalizedHashtags = normalizeHashtags(hashtags);
@@ -84,6 +84,20 @@ class SocialPostOrchestratorService {
 
       if (p.platform === 'instagram' && mediaCount === 0) {
         requiredFixes.push({ platform: 'instagram', message: 'Instagram requires at least one image or video.' });
+      }
+      if (type === 'story') {
+        if (p.platform === 'instagram' && mediaCount === 0) {
+          requiredFixes.push({ platform: 'instagram', message: 'Instagram story requires media.' });
+        }
+        if (p.platform === 'facebook') {
+          requiredFixes.push({ platform: 'facebook', message: 'Facebook Story publishing is not supported in current integration.' });
+        }
+        if (p.platform === 'telegram') {
+          requiredFixes.push({ platform: 'telegram', message: 'Telegram does not support Story format. Use post format.' });
+        }
+        if (p.platform === 'whatsapp') {
+          requiredFixes.push({ platform: 'whatsapp', message: 'WhatsApp Status publishing is not implemented in this flow yet.' });
+        }
       }
       if (p.platform === 'google_business' && fullText.length > MAX_GBP_TEXT) {
         warnings.push({ platform: 'google_business', message: 'Google Business copy is long and will be trimmed.' });
@@ -155,7 +169,7 @@ class SocialPostOrchestratorService {
 
   static async createJob({ userId, masterContent, mode = 'instant', scheduledAt, platforms }) {
     const platformIds = platforms.map((p) => p.platform);
-    const compatibility = this.validateCompatibility({ ...masterContent, platforms });
+    const compatibility = this.validateCompatibility({ ...masterContent, type: masterContent.type || 'post', platforms });
 
     const executions = platforms.map((p) => ({
       platform: p.platform,
@@ -220,14 +234,22 @@ class SocialPostOrchestratorService {
         this.emitStatus(jobDoc.user, jobDoc._id, exec);
 
         const mediaUrls = jobDoc.masterContent.mediaUrls || [];
+        const requestedType = jobDoc.masterContent.type || 'post';
         let result;
         if (exec.platform === 'instagram') {
           const ig = new InstagramService(config.accessToken, config.pageId, config.igAccountId);
-          result = await ig.publishPost({ caption: exec.formattedContent.text, mediaUrls, type: mediaUrls.length > 1 ? 'carousel' : 'post' });
+          const igType = requestedType === 'carousel' || mediaUrls.length > 1 ? 'carousel' : requestedType;
+          result = await ig.publishPost({ caption: exec.formattedContent.text, mediaUrls, type: igType });
         } else if (exec.platform === 'facebook') {
+          if (requestedType === 'story') {
+            throw new Error('Facebook Story publishing is not supported in current integration.');
+          }
           const fb = new FacebookService(config.accessToken, config.pageId);
-          result = await fb.publishPost(exec.formattedContent.text, mediaUrls, mediaUrls.length > 1 ? 'post' : 'post');
+          result = await fb.publishPost(exec.formattedContent.text, mediaUrls, requestedType);
         } else if (exec.platform === 'telegram') {
+          if (requestedType === 'story') {
+            throw new Error('Telegram does not support Story format. Use post format.');
+          }
           const tg = new TelegramService(config.botToken);
           const chatId = config.defaultChatId;
           if (!chatId) throw new Error('Telegram target chat/channel is missing.');

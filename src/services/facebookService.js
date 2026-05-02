@@ -17,6 +17,9 @@ class FacebookService {
    */
   async publishPost(message, mediaUrls = [], type = 'post') {
     try {
+      if (type === 'story') {
+        throw new Error('Facebook Story publishing is not supported in current integration.');
+      }
       const mediaUrl = mediaUrls[0];
       
       // Robust video detection
