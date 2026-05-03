@@ -6,6 +6,7 @@ const SocialMediaHubService = require('../services/socialMediaHubService');
 const SocialPostOrchestratorService = require('../services/socialPostOrchestratorService');
 const SocialPostJob = require('../models/SocialPostJob');
 const CloudinaryService = require('../services/cloudinaryService');
+const GeminiImageService = require('../services/geminiImageService');
 const logger = require('../utils/logger');
 
 // ─── Get Connected Accounts ────────────────────────────────────────────────
@@ -359,6 +360,46 @@ exports.deletePost = async (req, res, next) => {
     res.status(200).json({
       status: 'success',
       message: 'Post deleted successfully'
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Generate image using Gemini and return a hosted URL compatible with publish flow
+exports.generateImage = async (req, res, next) => {
+  try {
+    const { prompt, style, aspectRatio } = req.body;
+
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return next(new AppError('Prompt is required', 400));
+    }
+
+    const generated = await GeminiImageService.generateImage({
+      prompt: prompt.trim(),
+      style,
+      aspectRatio,
+    });
+
+    // Persist the generated image so it can be reused exactly like uploaded files.
+    const uploaded = await CloudinaryService.upload(generated.dataUrl, {
+      resource_type: 'image',
+      folder: 'social_hub/ai_generated',
+      format: 'png',
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        prompt: prompt.trim(),
+        style,
+        aspectRatio,
+        resourceType: 'image',
+        url: uploaded.url,
+        publicId: uploaded.publicId,
+        base64: generated.base64Data,
+        mimeType: generated.mimeType,
+      },
     });
   } catch (err) {
     next(err);
