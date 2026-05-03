@@ -309,11 +309,33 @@ async function handleInstagramComment(commentData, igAccount, agent) {
       return;
     }
 
-    // Generate short AI response for comment
-    const contextMessages = [];
-    const systemPrompt = agent.systemPrompt + "\n\nYou are replying to a public Instagram comment. Keep your reply extremely short, friendly, and under 2 sentences. Encourage them to DM for details.";
+    // 1. Check if bot is enabled for this account specifically OR via Agent
+    let enabled = igAccount.commentBotEnabled;
+    let systemPrompt = igAccount.commentBotPrompt;
 
-    const tempAgent = { ...agent.toObject(), systemPrompt };
+    // If not enabled specifically, check if an agent exists (legacy support)
+    if (!enabled && agent) {
+      // For now, let's say if an agent exists, we allow it to handle comments unless explicitly disabled
+      // But user asked for a "bot", so let's prioritize the specific toggle.
+      // logger.info("Account specific bot not enabled, checking agent...");
+    }
+
+    if (!enabled) {
+      logger.info(`Comment bot disabled for account: ${igAccount.igUsername || igAccount.igAccountId}`);
+      return;
+    }
+
+    // 2. Generate AI response
+    const contextMessages = [];
+    const fullPrompt = (systemPrompt || "Reply to this Instagram comment.") + "\n\nRules: Keep it short, friendly, and under 2 sentences. Use emojis if appropriate.";
+
+    // We can use a minimal mock agent object for AIService.generate
+    const tempAgent = { 
+      systemPrompt: fullPrompt,
+      temperature: 0.7,
+      contextWindow: 1
+    };
+    
     const aiResult = await AIService.generate(tempAgent, contextMessages, text);
 
     logger.info(`AI generated comment reply: ${aiResult.content}`);

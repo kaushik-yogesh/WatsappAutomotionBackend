@@ -29,6 +29,11 @@ const instagramAccountSchema = new mongoose.Schema({
   },
   errorMessage: String,
   isActive: { type: Boolean, default: true },
+  commentBotEnabled: { type: Boolean, default: false },
+  commentBotPrompt: { 
+    type: String, 
+    default: "You are a helpful assistant. Reply to this Instagram comment in a friendly way. Keep it short." 
+  },
 }, { timestamps: true });
 
 instagramAccountSchema.index({ user: 1 });

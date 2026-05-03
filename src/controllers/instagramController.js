@@ -203,3 +203,24 @@ exports.disconnectAccount = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.updateBotSettings = async (req, res, next) => {
+  try {
+    const { commentBotEnabled, commentBotPrompt } = req.body;
+    const account = await InstagramAccount.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id },
+      { commentBotEnabled, commentBotPrompt },
+      { new: true, runValidators: true }
+    );
+
+    if (!account) return next(new AppError('Account not found', 404));
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Bot settings updated successfully',
+      data: { account },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
