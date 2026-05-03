@@ -2,6 +2,7 @@ const AppError = require('../utils/AppError');
 const InstagramAccount = require('../models/InstagramAccount');
 const WhatsappAccount = require('../models/WhatsappAccount');
 const TelegramAccount = require('../models/TelegramAccount');
+const FacebookAccount = require('../models/FacebookAccount');
 const SocialMediaHubService = require('../services/socialMediaHubService');
 const SocialPostOrchestratorService = require('../services/socialPostOrchestratorService');
 const SocialPostJob = require('../models/SocialPostJob');
@@ -15,10 +16,12 @@ exports.getConnectedAccounts = async (req, res, next) => {
     const userId = req.user._id;
 
     const igAccounts = await InstagramAccount.find({ user: userId });
+    const fbAccounts = await FacebookAccount.find({ user: userId });
     const waAccounts = await WhatsappAccount.find({ user: userId });
     const tgAccounts = await TelegramAccount.find({ user: userId });
 
     const accounts = [];
+    const connectedFbPageIds = new Set();
 
     igAccounts.forEach(acc => {
       accounts.push({
@@ -44,6 +47,23 @@ exports.getConnectedAccounts = async (req, res, next) => {
         reconnectPath: '/instagram',
         errorMessage: acc.errorMessage || '',
       });
+      connectedFbPageIds.add(acc.pageId);
+    });
+
+    fbAccounts.forEach(acc => {
+      if (!connectedFbPageIds.has(acc.pageId)) {
+        accounts.push({
+          id: `fb_native_${acc._id}`,
+          platform: 'facebook',
+          name: acc.pageName || 'Facebook Page',
+          type: 'Business Page',
+          status: acc.status,
+          modelId: acc._id,
+          tokenValidity: acc.status === 'error' ? 'expired' : 'valid',
+          reconnectPath: '/facebook',
+          errorMessage: acc.errorMessage || '',
+        });
+      }
     });
 
     waAccounts.forEach(acc => {
