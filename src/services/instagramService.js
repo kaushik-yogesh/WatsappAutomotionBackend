@@ -77,11 +77,10 @@ class InstagramService {
 
       const creationId = containerResponse.data.id;
 
-      // 2. Poll for status if it's a video/reel/story
-      if (isVideo || type === 'reel' || type === 'story') {
-        logger.info(`Polling for Instagram ${type} container status (${creationId})...`);
-        await this._waitForMediaProcessing(creationId);
-      }
+      // 2. Poll for status
+      logger.info(`Polling for Instagram ${type} container status (${creationId})...`);
+      await this._waitForMediaProcessing(creationId);
+
 
       // 3. Publish Media Container
       logger.info(`Publishing Instagram ${type} (${creationId})...`);
