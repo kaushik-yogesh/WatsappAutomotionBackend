@@ -125,7 +125,7 @@ const ensurePublicMediaUrls = async (urls) => {
 exports.publishContent = async (req, res, next) => {
   try {
     let { type, caption, mediaUrls, platforms, hashtags = [], ctaText = '', link = '', mode = 'instant', scheduledAt } = req.body;
-    
+
     logger.info(`Publishing request: Type=${type}, Caption=${caption?.substring(0, 20)}..., MediaCount=${mediaUrls?.length}, PlatformCount=${platforms?.length}`);
     if (mediaUrls) {
       mediaUrls.forEach((url, i) => logger.info(`Media URL [${i}]: ${url?.substring(0, 50)}${url?.length > 50 ? '...' : ''}`));
@@ -136,7 +136,7 @@ exports.publishContent = async (req, res, next) => {
     }
 
     const platformConfigs = await SocialPostOrchestratorService.buildPlatformConfigs(req.user._id, platforms);
-    
+
     // Ensure all mediaUrls are public HTTP urls
     const publicMediaUrls = await ensurePublicMediaUrls(mediaUrls);
 
@@ -193,7 +193,7 @@ exports.publishContent = async (req, res, next) => {
 exports.validatePost = async (req, res, next) => {
   try {
     let { caption = '', mediaUrls = [], hashtags = [], ctaText = '', link = '', type = 'post', platforms = [] } = req.body;
-    
+
     const publicMediaUrls = await ensurePublicMediaUrls(mediaUrls);
 
     const platformConfigs = await SocialPostOrchestratorService.buildPlatformConfigs(req.user._id, platforms);
@@ -268,7 +268,7 @@ exports.getPublishingAnalytics = async (req, res, next) => {
 exports.updateProfile = async (req, res, next) => {
   try {
     const { name, description, platforms } = req.body;
-    
+
     if (!platforms || !Array.isArray(platforms) || platforms.length === 0) {
       return next(new AppError('Please select at least one platform', 400));
     }
@@ -292,14 +292,14 @@ exports.updateProfile = async (req, res, next) => {
         continue;
       }
 
-      const targetModelId = p.platform === 'facebook' && typeof p.id === 'string' && p.id.startsWith('fb_') 
-        ? p.id.replace('fb_', '') 
+      const targetModelId = p.platform === 'facebook' && typeof p.id === 'string' && p.id.startsWith('fb_')
+        ? p.id.replace('fb_', '')
         : p.id;
 
       if (p.platform === 'instagram' || p.platform === 'facebook') {
         const acc = await InstagramAccount.findOne({ _id: targetModelId, user: req.user._id })
           .select('+pageAccessToken +pageId +igAccountId');
-        
+
         if (acc) {
           platformConfigs.push({
             id: p.id,
@@ -340,7 +340,7 @@ exports.uploadMedia = async (req, res, next) => {
 
     const file = req.files.file;
     logger.info(`Uploading file to Cloudinary: ${file.name} (${file.size} bytes)`);
-    
+
     const result = await CloudinaryService.upload(file.tempFilePath, {
       resource_type: 'auto',
       folder: 'social_hub'
@@ -362,7 +362,7 @@ exports.getFeed = async (req, res, next) => {
       .select('+pageAccessToken +pageId +igAccountId');
     const fbAccounts = require('../models/FacebookAccount').find({ user: req.user._id })
       .select('+pageAccessToken +pageId');
-    
+
     const [ig, fbNative] = await Promise.all([igAccounts, fbAccounts]);
 
     const platformConfigs = [];
@@ -460,8 +460,8 @@ exports.deletePost = async (req, res, next) => {
       return res.status(200).json({ status: 'success' });
     }
 
-    const targetModelId = platform === 'facebook' && typeof accountId === 'string' && accountId.startsWith('fb_') 
-      ? accountId.replace('fb_', '') 
+    const targetModelId = platform === 'facebook' && typeof accountId === 'string' && accountId.startsWith('fb_')
+      ? accountId.replace('fb_', '')
       : accountId;
 
     const acc = await InstagramAccount.findOne({ _id: targetModelId, user: req.user._id })
@@ -548,8 +548,8 @@ exports.updateScheduledJob = async (req, res, next) => {
         accountId: String(p.id),
         accountName: p.name,
         status: 'pending',
-        formattedContent: SocialPostOrchestratorService.formatForPlatform({ 
-          platform: p.platform, 
+        formattedContent: SocialPostOrchestratorService.formatForPlatform({
+          platform: p.platform,
           text: caption || job.masterContent.text,
           mediaUrls: mediaUrls || job.masterContent.mediaUrls
         })
