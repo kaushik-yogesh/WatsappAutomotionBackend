@@ -30,7 +30,6 @@ class GeminiImageService {
 
     const defaults = [
       'gemini-2.5-flash',
-      'gemini-2.5-pro',
     ];
 
     return envModel
