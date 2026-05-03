@@ -24,8 +24,9 @@ exports.getConnectedAccounts = async (req, res, next) => {
     const connectedFbPageIds = new Set();
 
     igAccounts.forEach(acc => {
+      const accId = acc._id.toString();
       accounts.push({
-        id: acc._id,
+        id: accId,
         platform: 'instagram',
         name: acc.igUsername || acc.pageName || 'Instagram Account',
         type: 'Business Account',
@@ -37,7 +38,7 @@ exports.getConnectedAccounts = async (req, res, next) => {
       });
 
       accounts.push({
-        id: `fb_${acc._id}`,
+        id: `fb_${accId}`,
         platform: 'facebook',
         name: acc.pageName || 'Facebook Page',
         type: 'Business Page',
@@ -52,8 +53,9 @@ exports.getConnectedAccounts = async (req, res, next) => {
 
     fbAccounts.forEach(acc => {
       if (!connectedFbPageIds.has(acc.pageId)) {
+        const accId = acc._id.toString();
         accounts.push({
-          id: `fb_native_${acc._id}`,
+          id: `fb_native_${accId}`,
           platform: 'facebook',
           name: acc.pageName || 'Facebook Page',
           type: 'Business Page',

@@ -29,15 +29,23 @@ const normalizeHashtags = (hashtags = []) =>
 class SocialPostOrchestratorService {
   static async buildPlatformConfigs(userId, requestedPlatforms = []) {
     const configs = [];
+    logger.info(`Building platform configs for user ${userId}. Requested: ${requestedPlatforms.length}`);
     for (const p of requestedPlatforms) {
-      if (p.platform === 'facebook' && typeof p.id === 'string' && p.id.startsWith('fb_native_')) {
-        const targetModelId = p.id.replace('fb_native_', '');
+      const pid = String(p.id || '');
+      logger.info(`Processing platform request: ${p.platform}, id: ${pid}`);
+
+      if (p.platform === 'facebook' && pid.startsWith('fb_native_')) {
+        const targetModelId = pid.replace('fb_native_', '');
         const FacebookAccount = require('../models/FacebookAccount');
         const acc = await FacebookAccount.findOne({ _id: targetModelId, user: userId })
           .select('+pageAccessToken +pageId');
-        if (!acc) continue;
+        if (!acc) {
+          logger.warn(`Account not found: platform=${p.platform}, targetModelId=${targetModelId}, user=${userId}`);
+          continue;
+        }
+        logger.info(`Found account: ${acc._id}, platform=${p.platform}`);
         configs.push({
-          id: p.id,
+          id: pid,
           modelId: targetModelId,
           platform: 'facebook',
           name: p.name,
@@ -49,16 +57,20 @@ class SocialPostOrchestratorService {
         continue;
       }
 
-      const targetModelId = p.platform === 'facebook' && typeof p.id === 'string' && p.id.startsWith('fb_')
-        ? p.id.replace('fb_', '')
-        : p.id;
+      const targetModelId = p.platform === 'facebook' && pid.startsWith('fb_')
+        ? pid.replace('fb_', '')
+        : pid;
 
       if (p.platform === 'instagram' || p.platform === 'facebook') {
         const acc = await InstagramAccount.findOne({ _id: targetModelId, user: userId })
           .select('+pageAccessToken +pageId +igAccountId');
-        if (!acc) continue;
+        if (!acc) {
+          logger.warn(`Account not found: platform=${p.platform}, targetModelId=${targetModelId}, user=${userId}`);
+          continue;
+        }
+        logger.info(`Found account: ${acc._id}, platform=${p.platform}`);
         configs.push({
-          id: p.id,
+          id: pid,
           modelId: targetModelId,
           platform: p.platform,
           name: p.name,
