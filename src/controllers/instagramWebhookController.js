@@ -27,7 +27,7 @@ exports.receiveMessage = async (req, res) => {
 
   try {
     const { body } = req;
-    logger.info(body);
+    logger.info(`[INSTAGRAM WEBHOOK RECEIVED]: ${JSON.stringify(body, null, 2)}`);
 
     if (body.object !== 'instagram') return;
 

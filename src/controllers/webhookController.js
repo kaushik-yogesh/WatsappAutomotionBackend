@@ -30,6 +30,7 @@ exports.receiveMessage = async (req, res) => {
   res.status(200).json({ status: 'ok' });
 
   try {
+    logger.info(`[WHATSAPP WEBHOOK RECEIVED]: ${JSON.stringify(req.body, null, 2)}`);
     const parsed = WhatsAppService.parseWebhookMessage(req.body);
     if (!parsed) return;
 
