@@ -120,9 +120,6 @@ class SocialPostOrchestratorService {
         if (p.platform === 'instagram' && mediaCount === 0) {
           requiredFixes.push({ platform: 'instagram', message: 'Instagram story requires media.' });
         }
-        if (p.platform === 'facebook') {
-          requiredFixes.push({ platform: 'facebook', message: 'Facebook Story publishing is not supported in current integration.' });
-        }
         if (p.platform === 'telegram') {
           requiredFixes.push({ platform: 'telegram', message: 'Telegram does not support Story format. Use post format.' });
         }
@@ -272,9 +269,6 @@ class SocialPostOrchestratorService {
           const igType = requestedType === 'carousel' || mediaUrls.length > 1 ? 'carousel' : requestedType;
           result = await ig.publishPost({ caption: exec.formattedContent.text, mediaUrls, type: igType });
         } else if (exec.platform === 'facebook') {
-          if (requestedType === 'story') {
-            throw new Error('Facebook Story publishing is not supported in current integration.');
-          }
           const fb = new FacebookService(config.accessToken, config.pageId);
           result = await fb.publishPost(exec.formattedContent.text, mediaUrls, requestedType);
         } else if (exec.platform === 'telegram') {

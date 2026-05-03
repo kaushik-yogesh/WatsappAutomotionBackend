@@ -18,9 +18,26 @@ class FacebookService {
   async publishPost(message, mediaUrls = [], type = 'post') {
     try {
       if (type === 'story') {
-        throw new Error('Facebook Story publishing is not supported in current integration.');
+        const storyMediaUrl = mediaUrls[0];
+        const isStoryVideo = storyMediaUrl && (
+          storyMediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)/i) || 
+          (typeof storyMediaUrl === 'string' && storyMediaUrl.includes('/video/upload/'))
+        );
+        const storyEndpoint = isStoryVideo ? `${this.baseUrl}/${this.pageId}/video_stories` : `${this.baseUrl}/${this.pageId}/photo_stories`;
+        const storyData = isStoryVideo ? { video_url: storyMediaUrl } : { url: storyMediaUrl };
+        
+        logger.info(`Publishing story to Facebook: ${storyMediaUrl}`);
+        const response = await axios.post(storyEndpoint, storyData, {
+          params: { access_token: this.accessToken },
+        });
+        
+        return {
+          success: true,
+          id: response.data.id || response.data.post_id || response.data.video_id,
+          platform: 'facebook',
+          type: 'story'
+        };
       }
-
       if (type === 'carousel' || (mediaUrls && mediaUrls.length > 1)) {
         return await this._publishCarousel(message, mediaUrls);
       }
