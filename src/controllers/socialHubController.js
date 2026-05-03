@@ -104,10 +104,25 @@ exports.getConnectedAccounts = async (req, res, next) => {
   }
 };
 
+// Helper to ensure mediaUrls are always valid HTTP URLs (e.g. if a base64 string gets through)
+const ensurePublicMediaUrls = async (urls) => {
+  if (!urls || !Array.isArray(urls)) return [];
+  const processed = [];
+  for (const url of urls) {
+    if (url && (url.startsWith('data:image') || url.startsWith('data:video'))) {
+      const uploaded = await CloudinaryService.upload(url, { folder: 'social_hub/processed_data_urls' });
+      processed.push(uploaded.url);
+    } else {
+      processed.push(url);
+    }
+  }
+  return processed;
+};
+
 // ─── Publish Content ──────────────────────────────────────────────────────
 exports.publishContent = async (req, res, next) => {
   try {
-    const { type, caption, mediaUrls, platforms, hashtags = [], ctaText = '', link = '', mode = 'instant', scheduledAt } = req.body;
+    let { type, caption, mediaUrls, platforms, hashtags = [], ctaText = '', link = '', mode = 'instant', scheduledAt } = req.body;
     
     logger.info(`Publishing request: Type=${type}, Caption=${caption?.substring(0, 20)}..., MediaCount=${mediaUrls?.length}, PlatformCount=${platforms?.length}`);
     if (mediaUrls) {
@@ -119,9 +134,13 @@ exports.publishContent = async (req, res, next) => {
     }
 
     const platformConfigs = await SocialPostOrchestratorService.buildPlatformConfigs(req.user._id, platforms);
+    
+    // Ensure all mediaUrls are public HTTP urls
+    const publicMediaUrls = await ensurePublicMediaUrls(mediaUrls);
+
     const masterContent = {
       text: caption || '',
-      mediaUrls: mediaUrls || [],
+      mediaUrls: publicMediaUrls || [],
       hashtags,
       ctaText,
       link,
@@ -171,11 +190,14 @@ exports.publishContent = async (req, res, next) => {
 
 exports.validatePost = async (req, res, next) => {
   try {
-    const { caption = '', mediaUrls = [], hashtags = [], ctaText = '', link = '', type = 'post', platforms = [] } = req.body;
+    let { caption = '', mediaUrls = [], hashtags = [], ctaText = '', link = '', type = 'post', platforms = [] } = req.body;
+    
+    const publicMediaUrls = await ensurePublicMediaUrls(mediaUrls);
+
     const platformConfigs = await SocialPostOrchestratorService.buildPlatformConfigs(req.user._id, platforms);
     const data = SocialPostOrchestratorService.validateCompatibility({
       text: caption,
-      mediaUrls,
+      mediaUrls: publicMediaUrls,
       hashtags,
       ctaText,
       link,
