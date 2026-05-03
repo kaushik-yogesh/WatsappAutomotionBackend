@@ -401,9 +401,29 @@ exports.getFeed = async (req, res, next) => {
 
     const feed = await SocialMediaHubService.getFeed(platformConfigs);
 
+    // Fetch scheduled jobs from database
+    const scheduledJobs = await SocialPostJob.find({
+      user: req.user._id,
+      overallStatus: 'queued',
+      mode: 'scheduled'
+    }).sort({ scheduledAt: 1 });
+
+    const mappedScheduled = scheduledJobs.map(job => ({
+      id: job._id,
+      jobId: job._id, // Keep as jobId for editing
+      caption: job.masterContent.text,
+      mediaUrl: job.masterContent.mediaUrls?.[0],
+      platform: job.selectedPlatforms?.[0] || 'multiple',
+      timestamp: job.scheduledAt,
+      mode: 'scheduled',
+      overallStatus: job.overallStatus,
+      isJob: true,
+      type: job.masterContent.type || 'post'
+    }));
+
     res.status(200).json({
       status: 'success',
-      data: feed
+      data: [...mappedScheduled, ...feed]
     });
   } catch (err) {
     next(err);
@@ -413,7 +433,13 @@ exports.getFeed = async (req, res, next) => {
 // ─── Delete Post ──────────────────────────────────────────────────────────
 exports.deletePost = async (req, res, next) => {
   try {
-    const { platform, postId, accountId } = req.body;
+    const { platform, postId, accountId, isJob, jobId } = req.body;
+
+    if (isJob || jobId) {
+      const deleted = await SocialPostJob.findOneAndDelete({ _id: jobId || postId, user: req.user._id });
+      if (!deleted) return next(new AppError('Job not found', 404));
+      return res.status(200).json({ status: 'success', message: 'Scheduled post deleted' });
+    }
 
     if (!platform || !postId || !accountId) {
       return next(new AppError('platform, postId, and accountId are required', 400));
@@ -495,6 +521,43 @@ exports.generateImage = async (req, res, next) => {
         mimeType: generated.mimeType,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+};
+exports.updateScheduledJob = async (req, res, next) => {
+  try {
+    const { jobId } = req.params;
+    const { caption, mediaUrls, mode, scheduledAt, platforms } = req.body;
+
+    const job = await SocialPostJob.findOne({ _id: jobId, user: req.user._id });
+    if (!job) return next(new AppError('Scheduled post not found', 404));
+
+    if (job.overallStatus !== 'queued') {
+      return next(new AppError('Only queued posts can be edited', 400));
+    }
+
+    if (caption) job.masterContent.text = caption;
+    if (mediaUrls) job.masterContent.mediaUrls = mediaUrls;
+    if (mode) job.mode = mode;
+    if (scheduledAt) job.scheduledAt = scheduledAt;
+    if (platforms) {
+      job.selectedPlatforms = platforms.map(p => p.platform);
+      job.executions = platforms.map(p => ({
+        platform: p.platform,
+        accountId: String(p.id),
+        accountName: p.name,
+        status: 'pending',
+        formattedContent: SocialPostOrchestratorService.formatForPlatform({ 
+          platform: p.platform, 
+          text: caption || job.masterContent.text,
+          mediaUrls: mediaUrls || job.masterContent.mediaUrls
+        })
+      }));
+    }
+
+    await job.save();
+    res.status(200).json({ status: 'success', data: job });
   } catch (err) {
     next(err);
   }
