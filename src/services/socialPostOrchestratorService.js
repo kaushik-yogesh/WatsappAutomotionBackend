@@ -43,7 +43,7 @@ class SocialPostOrchestratorService {
           name: p.name,
           accessToken: acc.pageAccessToken,
           pageId: acc.pageId,
-          status: acc.status,
+          status: acc.status || 'connected',
           reconnectPath: '/facebook',
         });
         continue;
@@ -65,7 +65,7 @@ class SocialPostOrchestratorService {
           accessToken: acc.pageAccessToken,
           pageId: acc.pageId,
           igAccountId: acc.igAccountId,
-          status: acc.status,
+          status: acc.status || 'connected',
           reconnectPath: '/instagram',
         });
         continue;
@@ -80,7 +80,7 @@ class SocialPostOrchestratorService {
           platform: 'telegram',
           name: p.name || acc.botName || acc.botUsername,
           botToken: acc.botToken,
-          status: acc.status,
+          status: acc.status || 'connected',
           defaultChatId: acc.defaultChatId || '',
           reconnectPath: '/telegram',
         });
