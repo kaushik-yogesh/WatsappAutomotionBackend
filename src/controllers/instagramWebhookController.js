@@ -36,6 +36,11 @@ exports.receiveMessage = async (req, res) => {
       const changes = entry.changes; // For comments
       const messaging = entry.messaging; // For DMs
 
+      if (igAccountId === '0') {
+        logger.info('Received Meta test webhook event (ID: 0). Skipping processing.');
+        continue;
+      }
+
       logger.info(`Processing Instagram webhook entry for ID: ${igAccountId}`);
       logger.info(`Webhook entry payload: ${JSON.stringify(entry)}`);
 
