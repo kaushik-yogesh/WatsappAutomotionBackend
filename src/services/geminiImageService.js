@@ -21,6 +21,20 @@ const ASPECT_RATIO_HINTS = {
 };
 
 class GeminiImageService {
+  /**
+   * Ordered list of image models to try.
+   * You can override the primary model with GEMINI_IMAGE_MODEL in env.
+   */
+  static getCandidateModels() {
+    const envModel = process.env.GEMINI_IMAGE_MODEL?.trim();
+    const defaults = [
+      'gemini-2.5-flash-image',
+      'gemini-2.0-flash-preview-image-generation',
+    ];
+
+    return envModel ? [envModel, ...defaults.filter((m) => m !== envModel)] : defaults;
+  }
+
   static getClient() {
     if (!process.env.GEMINI_API_KEY) {
       throw new AppError('GEMINI_API_KEY is not configured on server.', 500);
@@ -64,21 +78,34 @@ class GeminiImageService {
   static async generateImage({ prompt, style, aspectRatio }) {
     const ai = GeminiImageService.getClient();
     const finalPrompt = GeminiImageService.buildPrompt({ prompt, style, aspectRatio });
+    const candidateModels = GeminiImageService.getCandidateModels();
+    let lastError;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash-preview-image-generation',
-      contents: finalPrompt,
-      config: {
-        responseModalities: ['TEXT', 'IMAGE'],
-      },
-    });
+    for (const model of candidateModels) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: finalPrompt,
+          config: {
+            responseModalities: ['TEXT', 'IMAGE'],
+          },
+        });
 
-    const imageResult = GeminiImageService.extractImageFromResponse(response);
-    if (!imageResult) {
-      throw new AppError('Gemini did not return an image. Please try a different prompt.', 502);
+        const imageResult = GeminiImageService.extractImageFromResponse(response);
+        if (imageResult) return imageResult;
+      } catch (error) {
+        lastError = error;
+      }
     }
 
-    return imageResult;
+    if (lastError) {
+      const statusCode = lastError?.status || lastError?.code || 502;
+      throw new AppError(
+        `Gemini image generation failed for available models. Last error: ${lastError?.message || 'Unknown error'}`,
+        Number.isInteger(statusCode) ? statusCode : 502
+      );
+    }
+    throw new AppError('Gemini did not return an image. Please try a different prompt.', 502);
   }
 }
 
