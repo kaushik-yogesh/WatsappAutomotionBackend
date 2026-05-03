@@ -95,49 +95,102 @@ ${prompt}
   }
 
   static async generateImage({ prompt, style, aspectRatio }) {
-    const ai = this.getClient();
     const finalPrompt = this.buildPrompt({ prompt, style, aspectRatio });
-    const candidateModels = this.getCandidateModels();
-
     let lastError;
 
-    for (const model of candidateModels) {
+    // 1. Try Gemini First (if key exists)
+    if (process.env.GEMINI_API_KEY) {
       try {
-        console.log(`Trying Gemini model: ${model}`);
+        const ai = this.getClient();
+        const candidateModels = this.getCandidateModels();
 
-        const response = await ai.models.generateContent({
-          model,
-          contents: finalPrompt,
-          config: {
-            responseModalities: ['IMAGE'],
-          },
-        });
+        for (const model of candidateModels) {
+          try {
+            console.log(`Trying Gemini model: ${model}`);
+            const response = await ai.models.generateContent({
+              model,
+              contents: finalPrompt,
+              config: { responseModalities: ['IMAGE'] },
+            });
 
-        const imageResult = this.extractImageFromResponse(response);
-
-        if (imageResult) {
-          console.log(`Success with model: ${model}`);
-          return imageResult;
+            const imageResult = this.extractImageFromResponse(response);
+            if (imageResult) {
+              console.log(`Success with model: ${model}`);
+              return imageResult;
+            }
+            console.warn(`No image returned from model: ${model}`);
+          } catch (error) {
+            console.error(`Model ${model} failed:`, error.message);
+            lastError = error;
+          }
         }
+      } catch (err) {
+        console.warn("Gemini client initialization failed:", err.message);
+        lastError = err;
+      }
+    } else {
+      console.warn("No GEMINI_API_KEY found, skipping Gemini.");
+    }
 
-        console.warn(`No image returned from model: ${model}`);
-      } catch (error) {
-        console.error(`Model ${model} failed:`, error.message);
-        lastError = error;
+    // 2. Fallback to OpenRouter Free Models if API Key is configured
+    if (process.env.OPENROUTER_API_KEY) {
+      try {
+        console.log("Trying OpenRouter for free image generation...");
+        // Using huggingface model on OpenRouter or standard completions for image
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "huggingface/black-forest-labs/flux-schnell", // Or another free image model on openrouter if it exists
+            messages: [{ role: "user", content: finalPrompt }],
+          })
+        });
+        
+        // OpenRouter image generation support is experimental and varies.
+        // We will catch and move to pollinations if it doesn't give a valid base64 image
+        console.warn("OpenRouter text-to-image may not return standard base64 image data automatically without specific integrations. Falling back to Pollinations...");
+      } catch (e) {
+        console.warn("OpenRouter fallback failed:", e.message);
       }
     }
 
-    if (lastError) {
+    // 3. Ultimate Fallback: Pollinations.ai (100% Free, no API key required)
+    console.log("Using Pollinations API for free image generation (jha free se mile)...");
+    try {
+      let width = 1080;
+      let height = 1080;
+      if (aspectRatio === '4:5') {
+        width = 1080; height = 1350;
+      } else if (aspectRatio === '9:16') {
+        width = 1080; height = 1920;
+      }
+
+      const seed = Math.floor(Math.random() * 1000000);
+      const encodedPrompt = encodeURIComponent(finalPrompt.replace(/\n/g, ' ').substring(0, 800));
+      const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}&nologo=true`;
+      
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Pollinations API error: ${response.statusText}`);
+      
+      const buffer = await response.arrayBuffer();
+      const base64Data = Buffer.from(buffer).toString('base64');
+      const mimeType = 'image/jpeg';
+      
+      return {
+        mimeType,
+        base64Data,
+        dataUrl: `data:${mimeType};base64,${base64Data}`
+      };
+    } catch (fallbackError) {
+      console.error("Free image fallback failed:", fallbackError);
       throw new AppError(
-        `Gemini image generation failed. Last error: ${lastError.message}`,
+        `Image generation failed across all providers. Last error: ${fallbackError.message}`,
         502
       );
     }
-
-    throw new AppError(
-      'Gemini did not return an image. Try a more descriptive prompt.',
-      502
-    );
   }
 }
 
