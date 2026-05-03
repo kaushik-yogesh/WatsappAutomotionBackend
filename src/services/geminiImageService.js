@@ -4,54 +4,73 @@ const AppError = require('../utils/AppError');
 const STYLE_PRESETS = {
   'Social Media Post':
     'Create a high-quality social media visual with clean composition, readable focal hierarchy, and strong engagement appeal.',
+
   'Product Ad':
-    'Create a product-ad style visual with premium commercial lighting, clear subject focus, and conversion-friendly composition.',
+    'Create a premium product advertisement visual with commercial lighting and strong conversion appeal.',
+
   'Promotional Banner':
-    'Create a promotional banner style visual with bold impact, marketing-ready framing, and space for headline/copy overlay.',
+    'Create a bold promotional marketing banner with strong visual impact.',
+
   Minimal:
-    'Create a minimal style visual with clean negative space, restrained palette, and simple modern composition.',
+    'Create a clean minimal modern design with balanced whitespace.',
+
   'Modern Business':
-    'Create a modern business style visual with professional aesthetics, polished visuals, and contemporary brand-safe tone.',
+    'Create a polished professional business creative with premium branding aesthetics.',
 };
 
 const ASPECT_RATIO_HINTS = {
-  '1:1': 'Square composition (1:1 ratio), optimized for feed posts.',
-  '4:5': 'Portrait composition (4:5 ratio), optimized for social feed visibility.',
-  '9:16': 'Vertical story composition (9:16 ratio), optimized for stories/reels.',
+  '1:1': 'Square format optimized for feed posts.',
+  '4:5': 'Portrait format optimized for social feed visibility.',
+  '9:16': 'Vertical format optimized for stories and reels.',
 };
 
 class GeminiImageService {
-  /**
-   * Ordered list of image models to try.
-   * You can override the primary model with GEMINI_IMAGE_MODEL in env.
-   */
   static getCandidateModels() {
     const envModel = process.env.GEMINI_IMAGE_MODEL?.trim();
+
     const defaults = [
-      'gemini-2.5-flash-image',
-      'gemini-2.0-flash-preview-image-generation',
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
     ];
 
-    return envModel ? [envModel, ...defaults.filter((m) => m !== envModel)] : defaults;
+    return envModel
+      ? [envModel, ...defaults.filter((m) => m !== envModel)]
+      : defaults;
   }
 
   static getClient() {
     if (!process.env.GEMINI_API_KEY) {
       throw new AppError('GEMINI_API_KEY is not configured on server.', 500);
     }
-    return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+    return new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+    });
   }
 
   static buildPrompt({ prompt, style, aspectRatio }) {
-    const styleInstruction = STYLE_PRESETS[style] || STYLE_PRESETS['Social Media Post'];
-    const ratioInstruction = ASPECT_RATIO_HINTS[aspectRatio] || ASPECT_RATIO_HINTS['1:1'];
+    const styleInstruction =
+      STYLE_PRESETS[style] || STYLE_PRESETS['Social Media Post'];
 
-    return [
-      styleInstruction,
-      ratioInstruction,
-      'No text watermark, no logo, no border unless explicitly requested.',
-      `User prompt: ${prompt}`,
-    ].join('\n');
+    const ratioInstruction =
+      ASPECT_RATIO_HINTS[aspectRatio] || ASPECT_RATIO_HINTS['1:1'];
+
+    return `
+${styleInstruction}
+${ratioInstruction}
+
+Generate only the final visual image.
+
+Requirements:
+- No watermark
+- No logo
+- No borders
+- Professional social media quality
+- High visual clarity
+
+User Prompt:
+${prompt}
+    `.trim();
   }
 
   static extractImageFromResponse(response) {
@@ -59,14 +78,15 @@ class GeminiImageService {
 
     for (const candidate of candidates) {
       const parts = candidate?.content?.parts || [];
+
       for (const part of parts) {
-        const inlineData = part?.inlineData;
-        if (inlineData?.data) {
-          const mimeType = inlineData.mimeType || 'image/png';
+        if (part?.inlineData?.data) {
+          const mimeType = part.inlineData.mimeType || 'image/png';
+
           return {
             mimeType,
-            base64Data: inlineData.data,
-            dataUrl: `data:${mimeType};base64,${inlineData.data}`,
+            base64Data: part.inlineData.data,
+            dataUrl: `data:${mimeType};base64,${part.inlineData.data}`,
           };
         }
       }
@@ -76,36 +96,49 @@ class GeminiImageService {
   }
 
   static async generateImage({ prompt, style, aspectRatio }) {
-    const ai = GeminiImageService.getClient();
-    const finalPrompt = GeminiImageService.buildPrompt({ prompt, style, aspectRatio });
-    const candidateModels = GeminiImageService.getCandidateModels();
+    const ai = this.getClient();
+    const finalPrompt = this.buildPrompt({ prompt, style, aspectRatio });
+    const candidateModels = this.getCandidateModels();
+
     let lastError;
 
     for (const model of candidateModels) {
       try {
+        console.log(`Trying Gemini model: ${model}`);
+
         const response = await ai.models.generateContent({
           model,
           contents: finalPrompt,
           config: {
-            responseModalities: ['TEXT', 'IMAGE'],
+            responseModalities: ['IMAGE'],
           },
         });
 
-        const imageResult = GeminiImageService.extractImageFromResponse(response);
-        if (imageResult) return imageResult;
+        const imageResult = this.extractImageFromResponse(response);
+
+        if (imageResult) {
+          console.log(`Success with model: ${model}`);
+          return imageResult;
+        }
+
+        console.warn(`No image returned from model: ${model}`);
       } catch (error) {
+        console.error(`Model ${model} failed:`, error.message);
         lastError = error;
       }
     }
 
     if (lastError) {
-      const statusCode = lastError?.status || lastError?.code || 502;
       throw new AppError(
-        `Gemini image generation failed for available models. Last error: ${lastError?.message || 'Unknown error'}`,
-        Number.isInteger(statusCode) ? statusCode : 502
+        `Gemini image generation failed. Last error: ${lastError.message}`,
+        502
       );
     }
-    throw new AppError('Gemini did not return an image. Please try a different prompt.', 502);
+
+    throw new AppError(
+      'Gemini did not return an image. Try a more descriptive prompt.',
+      502
+    );
   }
 }
 
