@@ -361,7 +361,10 @@ class SocialPostOrchestratorService {
 
   static async markTokenHealthOnFailure(platform, modelId, rawErrorMessage) {
     const lower = String(rawErrorMessage || '').toLowerCase();
-    const tokenIssue = lower.includes('access token') || lower.includes('oauth') || lower.includes('expired');
+    // Exclude transient media readiness issues from token invalidation
+    if (lower.includes('media is not ready') || lower.includes('media id is not available')) return;
+    
+    const tokenIssue = lower.includes('access token') || lower.includes('session has expired') || lower.includes('token expired') || (lower.includes('oauth') && lower.includes('validate'));
     if (!tokenIssue) return;
     try {
       if (platform === 'instagram' || platform === 'facebook') {
