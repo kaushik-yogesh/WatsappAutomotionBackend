@@ -64,7 +64,6 @@ const userSchema = new mongoose.Schema({
 });
 
 // Indexes
-userSchema.index({ email: 1 });
 userSchema.index({ 'subscription.plan': 1 });
 
 // Hash password before save
