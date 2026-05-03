@@ -414,6 +414,7 @@ exports.getFeed = async (req, res, next) => {
       caption: job.masterContent.text,
       mediaUrl: job.masterContent.mediaUrls?.[0],
       platform: job.selectedPlatforms?.[0] || 'multiple',
+      platforms: job.selectedPlatforms || [],
       timestamp: job.scheduledAt,
       mode: 'scheduled',
       overallStatus: job.overallStatus,
