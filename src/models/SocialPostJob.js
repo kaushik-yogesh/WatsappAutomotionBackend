@@ -30,6 +30,7 @@ const socialPostJobSchema = new mongoose.Schema({
     index: true,
   },
   masterContent: {
+    type: { type: String, default: 'post' },
     text: { type: String, default: '' },
     mediaUrls: { type: [String], default: [] },
     hashtags: { type: [String], default: [] },
