@@ -20,6 +20,11 @@ class FacebookService {
       if (type === 'story') {
         throw new Error('Facebook Story publishing is not supported in current integration.');
       }
+
+      if (type === 'carousel' || (mediaUrls && mediaUrls.length > 1)) {
+        return await this._publishCarousel(message, mediaUrls);
+      }
+
       const mediaUrl = mediaUrls[0];
       
       // Robust video detection
@@ -72,6 +77,48 @@ class FacebookService {
       const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
       logger.error(`Facebook publishPost error: ${errDetail}`);
       throw new Error(`Facebook API error: ${errDetail}`);
+    }
+  }
+
+  async _publishCarousel(message, mediaUrls) {
+    try {
+      const attachedMedia = [];
+      for (const url of mediaUrls) {
+        const isVideo = url.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)/i);
+        if (isVideo) {
+          throw new Error('Facebook Graph API currently does not easily support mixing videos in carousels. Please use only images for Facebook carousels.');
+        }
+        
+        const photoRes = await axios.post(
+          `${this.baseUrl}/${this.pageId}/photos`,
+          {
+            url: url,
+            published: false
+          },
+          { params: { access_token: this.accessToken } }
+        );
+        attachedMedia.push({ media_fbid: photoRes.data.id });
+      }
+
+      const response = await axios.post(
+        `${this.baseUrl}/${this.pageId}/feed`,
+        {
+          message: message,
+          attached_media: attachedMedia
+        },
+        { params: { access_token: this.accessToken } }
+      );
+
+      return {
+        success: true,
+        id: response.data.id,
+        platform: 'facebook',
+        type: 'carousel'
+      };
+    } catch (error) {
+      const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      logger.error(`Facebook _publishCarousel error: ${errDetail}`);
+      throw new Error(`Facebook Carousel error: ${errDetail}`);
     }
   }
 

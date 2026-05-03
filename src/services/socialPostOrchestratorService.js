@@ -30,6 +30,25 @@ class SocialPostOrchestratorService {
   static async buildPlatformConfigs(userId, requestedPlatforms = []) {
     const configs = [];
     for (const p of requestedPlatforms) {
+      if (p.platform === 'facebook' && typeof p.id === 'string' && p.id.startsWith('fb_native_')) {
+        const targetModelId = p.id.replace('fb_native_', '');
+        const FacebookAccount = require('../models/FacebookAccount');
+        const acc = await FacebookAccount.findOne({ _id: targetModelId, user: userId })
+          .select('+pageAccessToken +pageId');
+        if (!acc) continue;
+        configs.push({
+          id: p.id,
+          modelId: targetModelId,
+          platform: 'facebook',
+          name: p.name,
+          accessToken: acc.pageAccessToken,
+          pageId: acc.pageId,
+          status: acc.status,
+          reconnectPath: '/facebook',
+        });
+        continue;
+      }
+
       const targetModelId = p.platform === 'facebook' && typeof p.id === 'string' && p.id.startsWith('fb_')
         ? p.id.replace('fb_', '')
         : p.id;

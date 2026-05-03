@@ -251,6 +251,23 @@ exports.updateProfile = async (req, res, next) => {
 
     const platformConfigs = [];
     for (const p of platforms) {
+      if (p.platform === 'facebook' && typeof p.id === 'string' && p.id.startsWith('fb_native_')) {
+        const targetModelId = p.id.replace('fb_native_', '');
+        const FacebookAccount = require('../models/FacebookAccount');
+        const acc = await FacebookAccount.findOne({ _id: targetModelId, user: req.user._id })
+          .select('+pageAccessToken +pageId');
+        if (acc) {
+          platformConfigs.push({
+            id: p.id,
+            platform: 'facebook',
+            name: p.name,
+            accessToken: acc.pageAccessToken,
+            pageId: acc.pageId,
+          });
+        }
+        continue;
+      }
+
       const targetModelId = p.platform === 'facebook' && typeof p.id === 'string' && p.id.startsWith('fb_') 
         ? p.id.replace('fb_', '') 
         : p.id;
@@ -319,9 +336,15 @@ exports.getFeed = async (req, res, next) => {
   try {
     const igAccounts = await InstagramAccount.find({ user: req.user._id })
       .select('+pageAccessToken +pageId +igAccountId');
+    const fbAccounts = require('../models/FacebookAccount').find({ user: req.user._id })
+      .select('+pageAccessToken +pageId');
     
+    const [ig, fbNative] = await Promise.all([igAccounts, fbAccounts]);
+
     const platformConfigs = [];
-    igAccounts.forEach(acc => {
+    const connectedFbPageIds = new Set();
+
+    ig.forEach(acc => {
       if (acc.status === 'connected') {
         platformConfigs.push({
           id: acc._id,
@@ -333,6 +356,18 @@ exports.getFeed = async (req, res, next) => {
 
         platformConfigs.push({
           id: `fb_${acc._id}`,
+          platform: 'facebook',
+          accessToken: acc.pageAccessToken,
+          pageId: acc.pageId
+        });
+        connectedFbPageIds.add(acc.pageId);
+      }
+    });
+
+    fbNative.forEach(acc => {
+      if (acc.status === 'connected' && !connectedFbPageIds.has(acc.pageId)) {
+        platformConfigs.push({
+          id: `fb_native_${acc._id}`,
           platform: 'facebook',
           accessToken: acc.pageAccessToken,
           pageId: acc.pageId
@@ -358,6 +393,21 @@ exports.deletePost = async (req, res, next) => {
 
     if (!platform || !postId || !accountId) {
       return next(new AppError('platform, postId, and accountId are required', 400));
+    }
+
+    if (platform === 'facebook' && typeof accountId === 'string' && accountId.startsWith('fb_native_')) {
+      const targetModelId = accountId.replace('fb_native_', '');
+      const FacebookAccount = require('../models/FacebookAccount');
+      const acc = await FacebookAccount.findOne({ _id: targetModelId, user: req.user._id })
+        .select('+pageAccessToken +pageId');
+      if (!acc) return next(new AppError('Account not found', 404));
+      await SocialMediaHubService.deletePost({
+        platform,
+        postId,
+        accessToken: acc.pageAccessToken,
+        pageId: acc.pageId
+      });
+      return res.status(200).json({ status: 'success' });
     }
 
     const targetModelId = platform === 'facebook' && typeof accountId === 'string' && accountId.startsWith('fb_') 
