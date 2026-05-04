@@ -401,22 +401,22 @@ exports.getFeed = async (req, res, next) => {
 
     const feed = await SocialMediaHubService.getFeed(platformConfigs);
 
-    // Fetch scheduled jobs from database
-    const scheduledJobs = await SocialPostJob.find({
+    // Fetch jobs from database (scheduled, failed, partially_failed)
+    const jobs = await SocialPostJob.find({
       user: req.user._id,
-      overallStatus: 'queued',
-      mode: 'scheduled'
-    }).sort({ scheduledAt: 1 });
+      overallStatus: { $in: ['queued', 'failed', 'partially_failed', 'processing'] },
+    }).sort({ createdAt: -1 });
 
-    const mappedScheduled = scheduledJobs.map(job => ({
+    const mappedJobs = jobs.map(job => ({
       id: job._id,
-      jobId: job._id, // Keep as jobId for editing
+      jobId: job._id,
       caption: job.masterContent.text,
       mediaUrl: job.masterContent.mediaUrls?.[0],
       platform: job.selectedPlatforms?.[0] || 'multiple',
       platforms: job.selectedPlatforms || [],
-      timestamp: job.scheduledAt,
-      mode: 'scheduled',
+      executions: job.executions, // Pass executions to frontend for granular status
+      timestamp: job.scheduledAt || job.createdAt,
+      mode: job.mode,
       overallStatus: job.overallStatus,
       isJob: true,
       type: job.masterContent.type || 'post'
@@ -424,7 +424,7 @@ exports.getFeed = async (req, res, next) => {
 
     res.status(200).json({
       status: 'success',
-      data: [...mappedScheduled, ...feed]
+      data: [...mappedJobs, ...feed]
     });
   } catch (err) {
     next(err);

@@ -253,66 +253,83 @@ class SocialPostOrchestratorService {
       }
 
       exec.status = 'connecting';
-      exec.attempts += 1;
       this.emitStatus(jobDoc.user, jobDoc._id, exec);
       await jobDoc.save();
 
-      try {
-        exec.status = 'publishing';
-        this.emitStatus(jobDoc.user, jobDoc._id, exec);
+      const maxAttempts = 2;
+      let attempt = 0;
+      let success = false;
 
-        const mediaUrls = jobDoc.masterContent.mediaUrls || [];
-        const requestedType = jobDoc.masterContent.type || 'post';
-        let result;
-        if (exec.platform === 'instagram') {
-          const ig = new InstagramService(config.accessToken, config.pageId, config.igAccountId);
-          const igType = requestedType === 'carousel' || mediaUrls.length > 1 ? 'carousel' : requestedType;
-          result = await ig.publishPost({ caption: exec.formattedContent.text, mediaUrls, type: igType });
-        } else if (exec.platform === 'facebook') {
-          const fb = new FacebookService(config.accessToken, config.pageId);
-          result = await fb.publishPost(exec.formattedContent.text, mediaUrls, requestedType);
-        } else if (exec.platform === 'telegram') {
-          if (requestedType === 'story') {
-            throw new Error('Telegram does not support Story format. Use post format.');
-          }
-          const tg = new TelegramService(config.botToken);
-          const chatId = config.defaultChatId;
-          if (!chatId) throw new Error('Telegram target chat/channel is missing.');
-          if (mediaUrls.length > 1) {
-            const media = mediaUrls.map((url, idx) => ({
-              type: /\.(mp4|mov|avi|wmv|m4v|webm)$/i.test(url) ? 'video' : 'photo',
-              media: url,
-              caption: idx === 0 ? exec.formattedContent.text : undefined,
-            }));
-            result = await tg.sendMediaGroup(chatId, media);
-          } else if (mediaUrls.length === 1) {
-            const url = mediaUrls[0];
-            if (/\.(mp4|mov|avi|wmv|m4v|webm)$/i.test(url)) {
-              result = await tg.sendVideo(chatId, url, exec.formattedContent.text);
+      while (attempt < maxAttempts && !success) {
+        attempt++;
+        exec.attempts = (exec.attempts || 0) + 1;
+        try {
+          exec.status = 'publishing';
+          if (attempt > 1) exec.humanMessage = `Retrying (Attempt ${attempt})...`;
+          this.emitStatus(jobDoc.user, jobDoc._id, exec);
+
+          const mediaUrls = jobDoc.masterContent.mediaUrls || [];
+          const requestedType = jobDoc.masterContent.type || 'post';
+          let result;
+          if (exec.platform === 'instagram') {
+            const ig = new InstagramService(config.accessToken, config.pageId, config.igAccountId);
+            const igType = requestedType === 'carousel' || mediaUrls.length > 1 ? 'carousel' : requestedType;
+            result = await ig.publishPost({ caption: exec.formattedContent.text, mediaUrls, type: igType });
+          } else if (exec.platform === 'facebook') {
+            const fb = new FacebookService(config.accessToken, config.pageId);
+            result = await fb.publishPost(exec.formattedContent.text, mediaUrls, requestedType);
+          } else if (exec.platform === 'telegram') {
+            if (requestedType === 'story') {
+              throw new Error('Telegram does not support Story format. Use post format.');
+            }
+            const tg = new TelegramService(config.botToken);
+            const chatId = config.defaultChatId;
+            if (!chatId) throw new Error('Telegram target chat/channel is missing.');
+            if (mediaUrls.length > 1) {
+              const media = mediaUrls.map((url, idx) => ({
+                type: /\.(mp4|mov|avi|wmv|m4v|webm)$/i.test(url) ? 'video' : 'photo',
+                media: url,
+                caption: idx === 0 ? exec.formattedContent.text : undefined,
+              }));
+              result = await tg.sendMediaGroup(chatId, media);
+            } else if (mediaUrls.length === 1) {
+              const url = mediaUrls[0];
+              if (/\.(mp4|mov|avi|wmv|m4v|webm)$/i.test(url)) {
+                result = await tg.sendVideo(chatId, url, exec.formattedContent.text);
+              } else {
+                result = await tg.sendPhoto(chatId, url, exec.formattedContent.text);
+              }
             } else {
-              result = await tg.sendPhoto(chatId, url, exec.formattedContent.text);
+              result = await tg.sendTextMessage(chatId, exec.formattedContent.text);
             }
           } else {
-            result = await tg.sendTextMessage(chatId, exec.formattedContent.text);
+            throw new Error(`Platform ${exec.platform} is not supported yet.`);
           }
-        } else {
-          throw new Error(`Platform ${exec.platform} is not supported yet.`);
-        }
 
-        exec.status = 'success';
-        exec.publishedAt = new Date();
-        exec.externalPostId = result?.id || result?.result?.message_id?.toString() || '';
-        exec.errorMessage = '';
-        exec.humanMessage = 'Published successfully.';
-        this.emitStatus(jobDoc.user, jobDoc._id, exec);
-      } catch (err) {
-        exec.status = 'failed';
-        exec.errorMessage = err.message;
-        exec.humanMessage = humanizeError(err.message);
-        this.emitStatus(jobDoc.user, jobDoc._id, exec);
-        await this.markTokenHealthOnFailure(exec.platform, config.modelId, err.message);
+          exec.status = 'success';
+          exec.publishedAt = new Date();
+          exec.externalPostId = result?.id || result?.result?.message_id?.toString() || '';
+          exec.errorMessage = '';
+          exec.humanMessage = 'Published successfully.';
+          success = true;
+          this.emitStatus(jobDoc.user, jobDoc._id, exec);
+        } catch (err) {
+          const lower = err.message.toLowerCase();
+          const isTokenError = lower.includes('access token') || lower.includes('session has expired') || lower.includes('token expired') || lower.includes('oauth');
+          
+          if (attempt >= maxAttempts || isTokenError) {
+            exec.status = 'failed';
+            exec.errorMessage = err.message;
+            exec.humanMessage = humanizeError(err.message);
+            this.emitStatus(jobDoc.user, jobDoc._id, exec);
+            await this.markTokenHealthOnFailure(exec.platform, config.modelId, err.message);
+            break; 
+          }
+          // Wait a bit before retry
+          await new Promise(r => setTimeout(r, 2000));
+        }
+        await jobDoc.save();
       }
-      await jobDoc.save();
     }
 
     const successCount = jobDoc.executions.filter((e) => e.status === 'success').length;
