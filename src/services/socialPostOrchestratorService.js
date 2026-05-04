@@ -424,9 +424,10 @@ class SocialPostOrchestratorService {
       .update(normalizedContent.text + (normalizedContent.mediaUrls || []).join(','))
       .digest('hex');
 
+    const requestTimeSuffix = scheduledAt ? new Date(scheduledAt).getTime() : `instant-${Date.now()}`;
+
     const executions = platforms.map((p) => {
-      const scheduleTime = scheduledAt ? new Date(scheduledAt).getTime() : 'instant';
-      const idempotencyKey = `${userId}-${p.platform}-${contentHash}-${scheduleTime}`;
+      const idempotencyKey = `${userId}-${p.platform}-${contentHash}-${requestTimeSuffix}`;
 
       return {
         platform: p.platform,
@@ -515,8 +516,13 @@ class SocialPostOrchestratorService {
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         if (exec.idempotencyKey) {
           const alreadyPublished = await SocialPostJob.findOne({
-            'executions.idempotencyKey': exec.idempotencyKey,
-            'executions.status': 'success'
+            _id: { $ne: jobDoc._id },
+            executions: {
+              $elemMatch: {
+                idempotencyKey: exec.idempotencyKey,
+                status: 'success'
+              }
+            }
           });
           if (alreadyPublished) {
             const otherExec = alreadyPublished.executions.find(e => e.idempotencyKey === exec.idempotencyKey);
