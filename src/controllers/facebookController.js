@@ -50,6 +50,7 @@ exports.autoConnect = async (req, res, next) => {
             pageAccessToken: page.access_token,
             status: 'connected',
             isActive: true,
+            lastValidatedAt: new Date(),
           },
           { new: true, upsert: true }
         );

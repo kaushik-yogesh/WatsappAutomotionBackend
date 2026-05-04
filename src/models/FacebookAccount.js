@@ -25,6 +25,8 @@ const facebookAccountSchema = new mongoose.Schema({
     default: 'connected',
   },
   errorMessage: String,
+  tokenExpiry: Date,
+  lastValidatedAt: Date,
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 

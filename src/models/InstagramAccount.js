@@ -28,6 +28,8 @@ const instagramAccountSchema = new mongoose.Schema({
     default: 'connected',
   },
   errorMessage: String,
+  tokenExpiry: Date,
+  lastValidatedAt: Date,
   isActive: { type: Boolean, default: true },
   commentBotEnabled: { type: Boolean, default: false },
   commentBotPrompt: { 

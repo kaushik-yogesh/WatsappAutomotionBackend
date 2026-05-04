@@ -287,7 +287,11 @@ class SocialPostOrchestratorService {
             result = await ig.publishPost({ caption: exec.formattedContent.text, mediaUrls, type: igType });
           } else if (exec.platform === 'facebook') {
             const fb = new FacebookService(config.accessToken, config.pageId);
-            result = await fb.publishPost(exec.formattedContent.text, mediaUrls, requestedType);
+            result = await fb.publishToFacebook(config, {
+              text: exec.formattedContent.text,
+              mediaUrls,
+              type: requestedType
+            });
           } else if (exec.platform === 'telegram') {
             if (requestedType === 'story') {
               throw new Error('Telegram does not support Story format. Use post format.');
@@ -326,17 +330,27 @@ class SocialPostOrchestratorService {
         } catch (err) {
           const lower = err.message.toLowerCase();
           const isUnknownError = lower.includes('unknown error') || (lower.includes('code":1') && lower.includes('oauthexception'));
-          const isTokenError = !isUnknownError && (lower.includes('access token') || lower.includes('session has expired') || lower.includes('token expired') || lower.includes('oauth'));
+          const isTokenError = !isUnknownError && (lower.includes('access token') || lower.includes('session has expired') || lower.includes('token expired') || lower.includes('oauth') || lower.includes('reconnect'));
           
-          if (attempt >= maxAttempts || isTokenError) {
+          if (isTokenError) {
+            logger.error(`[Orchestrator] Terminal token error for ${exec.platform}. Stopping retries.`);
+            exec.status = 'failed';
+            exec.errorMessage = err.message;
+            exec.humanMessage = 'Your account session expired. Please reconnect this platform.';
+            this.emitStatus(jobDoc.user, jobDoc._id, exec);
+            await this.markTokenHealthOnFailure(exec.platform, config.modelId, err.message);
+            break; // Stop immediately
+          }
+
+          if (attempt >= maxAttempts) {
             exec.status = 'failed';
             exec.errorMessage = err.message;
             exec.humanMessage = humanizeError(err.message);
             this.emitStatus(jobDoc.user, jobDoc._id, exec);
-            await this.markTokenHealthOnFailure(exec.platform, config.modelId, err.message);
+            // Non-token errors don't necessarily mark account as error
             break; 
           }
-          // Wait a bit before retry
+          // Wait a bit before retry for transient errors
           await new Promise(r => setTimeout(r, 2000));
         }
         await jobDoc.save();
@@ -396,10 +410,17 @@ class SocialPostOrchestratorService {
     if (!tokenIssue) return;
     try {
       if (platform === 'instagram' || platform === 'facebook') {
-        await InstagramAccount.findByIdAndUpdate(modelId, { status: 'error', errorMessage: 'Token expired. Please reconnect.' });
+        const targetModel = platform === 'facebook' ? require('../models/FacebookAccount') : require('../models/InstagramAccount');
+        await targetModel.findByIdAndUpdate(modelId, { 
+          status: 'disconnected', 
+          errorMessage: 'Token expired. Please reconnect.' 
+        });
       }
       if (platform === 'telegram') {
-        await TelegramAccount.findByIdAndUpdate(modelId, { status: 'error', errorMessage: 'Token expired or invalid. Please reconnect.' });
+        await TelegramAccount.findByIdAndUpdate(modelId, { 
+          status: 'disconnected', 
+          errorMessage: 'Token expired or invalid. Please reconnect.' 
+        });
       }
     } catch (err) {
       logger.warn(`Could not update token health for ${platform}:${modelId} - ${err.message}`);
