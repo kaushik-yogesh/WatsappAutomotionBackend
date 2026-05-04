@@ -74,12 +74,14 @@ class FacebookService {
         const storyEndpoint = isStoryVideo ? `${endpointBase}/video_stories` : `${endpointBase}/photo_stories`;
         const storyData = isStoryVideo ? { video_url: storyMediaUrl } : { url: storyMediaUrl };
         
-        logger.info(`[Facebook] Attempting Page Story publish. Endpoint: ${storyEndpoint}`);
+        logger.info(`[Facebook] Attempting Page Story publish. PageId: ${this.pageId}, Endpoint: ${storyEndpoint}`);
         
         try {
           const response = await axios.post(storyEndpoint, storyData, {
             params: { access_token: this.accessToken },
           });
+          
+          logger.info(`[Facebook] Story Publish Response: ${JSON.stringify(response.data)}`);
           
           result = {
             success: true,
@@ -90,10 +92,13 @@ class FacebookService {
             tokenType: 'page'
           };
         } catch (storyErr) {
-          const errDetail = storyErr.response?.data ? JSON.stringify(storyErr.response.data) : storyErr.message;
-          logger.warn(`[Facebook] Page Story API failed: ${errDetail}. Falling back to normal Page post.`);
-          // Fallback to normal post as requested
-          result = await this._publishNormal(message, mediaUrls, 'post');
+          const errData = storyErr.response?.data;
+          const errDetail = errData ? JSON.stringify(errData) : storyErr.message;
+          
+          logger.error(`[Facebook] Story Publish FAILED. PageId: ${this.pageId}, Endpoint: ${storyEndpoint}, Error: ${errDetail}`);
+          
+          // No longer falling back to normal post. Inform user that it's unsupported.
+          throw new Error(`Facebook Page Story publishing is not supported by Meta API for this account. (Error: ${errDetail})`);
         }
       } else if (type === 'carousel' || (mediaUrls && mediaUrls.length > 1)) {
         result = await this._publishCarousel(message, mediaUrls);

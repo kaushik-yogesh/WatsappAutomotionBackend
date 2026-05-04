@@ -126,7 +126,9 @@ class SocialPostOrchestratorService {
       if (p.platform === 'instagram' && mediaCount === 0) {
         requiredFixes.push({ platform: 'instagram', message: 'Instagram requires at least one image or video.' });
       }
-      if (type === 'story') {
+        if (p.platform === 'facebook' && type === 'story') {
+          requiredFixes.push({ platform: 'facebook', message: 'Facebook Page Story publishing is not supported by Meta API. Please select Feed Post.' });
+        }
         if (p.platform === 'instagram' && mediaCount === 0) {
           requiredFixes.push({ platform: 'instagram', message: 'Instagram story requires media.' });
         }
