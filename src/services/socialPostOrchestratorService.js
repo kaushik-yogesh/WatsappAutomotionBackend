@@ -12,11 +12,21 @@ const MAX_GBP_TEXT = 1500;
 
 const humanizeError = (rawMessage = '') => {
   const msg = String(rawMessage).toLowerCase();
-  if (msg.includes('expired') || msg.includes('oauth') || msg.includes('access token')) return 'Your account session expired. Please reconnect this platform.';
+  
+  // Specific check for Meta "Unknown Error" (Code 1) which is transient, not a token issue
+  if (msg.includes('unknown error') || (msg.includes('code":1') && msg.includes('oauthexception'))) {
+    return 'Meta (Facebook/Instagram) is experiencing a temporary glitch. Please wait a moment and retry.';
+  }
+
+  if (msg.includes('expired') || msg.includes('access token') || (msg.includes('oauth') && (msg.includes('token') || msg.includes('session') || msg.includes('validate')))) {
+    return 'Your account session expired. Please reconnect this platform.';
+  }
+  
   if (msg.includes('rate limit') || msg.includes('too many')) return 'Platform rate limit reached. Please retry in a few minutes.';
   if (msg.includes('network') || msg.includes('timeout') || msg.includes('socket hang up')) return 'Temporary network issue. Please retry.';
   if (msg.includes('unsupported') || msg.includes('format')) return 'This media format is not supported for that platform.';
   if (msg.includes('requires at least one valid image') || msg.includes('requires media')) return 'This platform requires media for this post type.';
+  
   return 'Publishing failed. Please review content and try again.';
 };
 
@@ -315,7 +325,8 @@ class SocialPostOrchestratorService {
           this.emitStatus(jobDoc.user, jobDoc._id, exec);
         } catch (err) {
           const lower = err.message.toLowerCase();
-          const isTokenError = lower.includes('access token') || lower.includes('session has expired') || lower.includes('token expired') || lower.includes('oauth');
+          const isUnknownError = lower.includes('unknown error') || (lower.includes('code":1') && lower.includes('oauthexception'));
+          const isTokenError = !isUnknownError && (lower.includes('access token') || lower.includes('session has expired') || lower.includes('token expired') || lower.includes('oauth'));
           
           if (attempt >= maxAttempts || isTokenError) {
             exec.status = 'failed';
@@ -378,8 +389,8 @@ class SocialPostOrchestratorService {
 
   static async markTokenHealthOnFailure(platform, modelId, rawErrorMessage) {
     const lower = String(rawErrorMessage || '').toLowerCase();
-    // Exclude transient media readiness issues from token invalidation
-    if (lower.includes('media is not ready') || lower.includes('media id is not available')) return;
+    // Exclude transient media readiness or Meta "Unknown" glitches from token invalidation
+    if (lower.includes('media is not ready') || lower.includes('media id is not available') || lower.includes('unknown error')) return;
     
     const tokenIssue = lower.includes('access token') || lower.includes('session has expired') || lower.includes('token expired') || (lower.includes('oauth') && lower.includes('validate'));
     if (!tokenIssue) return;
