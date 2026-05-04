@@ -9,6 +9,12 @@ const SocialPostJob = require('../models/SocialPostJob');
 const CloudinaryService = require('../services/cloudinaryService');
 const GeminiImageService = require('../services/geminiImageService');
 const logger = require('../utils/logger');
+const normalizePostType = (type = 'post') => {
+  const value = String(type || 'post').trim().toLowerCase();
+  if (value === 'carosul') return 'carousel';
+  if (['post', 'reel', 'story', 'carousel'].includes(value)) return value;
+  return 'post';
+};
 
 // ─── Get Connected Accounts ────────────────────────────────────────────────
 exports.getConnectedAccounts = async (req, res, next) => {
@@ -125,6 +131,7 @@ const ensurePublicMediaUrls = async (urls) => {
 exports.publishContent = async (req, res, next) => {
   try {
     let { type, caption, mediaUrls, platforms, hashtags = [], ctaText = '', link = '', mode = 'instant', scheduledAt } = req.body;
+    type = normalizePostType(type);
 
     logger.info(`Publishing request: Type=${type}, Caption=${caption?.substring(0, 20)}..., MediaCount=${mediaUrls?.length}, PlatformCount=${platforms?.length}`);
     if (mediaUrls) {
@@ -136,9 +143,19 @@ exports.publishContent = async (req, res, next) => {
     }
 
     const platformConfigs = await SocialPostOrchestratorService.buildPlatformConfigs(req.user._id, platforms);
+    if (!platformConfigs.length) {
+      return next(new AppError('No valid connected accounts found for selected platforms. Please reconnect and try again.', 400));
+    }
+
+    const requestedPlatformRefs = new Set(platforms.map((p) => `${p.platform}:${String(p.id)}`));
+    const resolvedPlatformRefs = new Set(platformConfigs.map((p) => `${p.platform}:${String(p.id)}`));
+    const unresolved = [...requestedPlatformRefs].filter((ref) => !resolvedPlatformRefs.has(ref));
+    if (unresolved.length) {
+      return next(new AppError(`Some selected accounts are no longer available: ${unresolved.join(', ')}`, 400));
+    }
 
     // Ensure all mediaUrls are public HTTP urls
-    const publicMediaUrls = await ensurePublicMediaUrls(mediaUrls);
+    const publicMediaUrls = (await ensurePublicMediaUrls(mediaUrls)).filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u));
 
     const masterContent = {
       text: caption || '',
@@ -165,6 +182,9 @@ exports.publishContent = async (req, res, next) => {
     const scheduleDate = isScheduled ? new Date(scheduledAt) : null;
     if (isScheduled && (!scheduleDate || Number.isNaN(scheduleDate.getTime()))) {
       return next(new AppError('Valid schedule date/time is required.', 400));
+    }
+    if (isScheduled && scheduleDate <= new Date()) {
+      return next(new AppError('Scheduled date/time must be in the future.', 400));
     }
 
     const job = await SocialPostOrchestratorService.createJob({
@@ -203,10 +223,21 @@ exports.publishContent = async (req, res, next) => {
 exports.validatePost = async (req, res, next) => {
   try {
     let { caption = '', mediaUrls = [], hashtags = [], ctaText = '', link = '', type = 'post', platforms = [] } = req.body;
+    type = normalizePostType(type);
 
-    const publicMediaUrls = await ensurePublicMediaUrls(mediaUrls);
+    const publicMediaUrls = (await ensurePublicMediaUrls(mediaUrls)).filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u));
 
     const platformConfigs = await SocialPostOrchestratorService.buildPlatformConfigs(req.user._id, platforms);
+    if (!platformConfigs.length) {
+      return next(new AppError('No valid connected accounts found for selected platforms. Please reconnect and try again.', 400));
+    }
+
+    const requestedPlatformRefs = new Set(platforms.map((p) => `${p.platform}:${String(p.id)}`));
+    const resolvedPlatformRefs = new Set(platformConfigs.map((p) => `${p.platform}:${String(p.id)}`));
+    const unresolved = [...requestedPlatformRefs].filter((ref) => !resolvedPlatformRefs.has(ref));
+    if (unresolved.length) {
+      return next(new AppError(`Some selected accounts are no longer available: ${unresolved.join(', ')}`, 400));
+    }
     const data = SocialPostOrchestratorService.validateCompatibility({
       text: caption,
       mediaUrls: publicMediaUrls,
@@ -583,3 +614,5 @@ exports.updateScheduledJob = async (req, res, next) => {
     next(err);
   }
 };
+
+
