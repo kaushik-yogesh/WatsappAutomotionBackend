@@ -64,46 +64,18 @@ class FacebookService {
       let result;
 
       if (type === 'story') {
-        const storyMediaUrl = mediaUrls[0];
-        const isStoryVideo = storyMediaUrl && (
-          storyMediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)/i) || 
-          (typeof storyMediaUrl === 'string' && storyMediaUrl.includes('/video/upload/'))
-        );
-        
-        // Facebook Stories API for Pages (Note: Requires specific permissions)
-        const storyEndpoint = isStoryVideo ? `${endpointBase}/video_stories` : `${endpointBase}/photo_stories`;
-        const storyData = isStoryVideo ? { video_url: storyMediaUrl } : { url: storyMediaUrl };
-        
-        logger.info(`[Facebook] Attempting Page Story publish. PageId: ${this.pageId}, Endpoint: ${storyEndpoint}`);
-        
-        try {
-          const response = await axios.post(storyEndpoint, storyData, {
-            params: { access_token: this.accessToken },
-          });
-          
-          logger.info(`[Facebook] Story Publish Response: ${JSON.stringify(response.data)}`);
-          
-          result = {
-            success: true,
-            id: response.data.id || response.data.post_id || response.data.video_id,
-            platform: 'facebook',
-            type: 'story',
-            endpoint: storyEndpoint,
-            tokenType: 'page'
-          };
-        } catch (storyErr) {
-          const errData = storyErr.response?.data;
-          const errDetail = errData ? JSON.stringify(errData) : storyErr.message;
-          
-          logger.error(`[Facebook] Story Publish FAILED. PageId: ${this.pageId}, Endpoint: ${storyEndpoint}, Error: ${errDetail}`);
-          
-          // No longer falling back to normal post. Inform user that it's unsupported.
-          throw new Error(`Facebook Page Story publishing is not supported by Meta API for this account. (Error: ${errDetail})`);
-        }
+        result = await this._publishStory(message, mediaUrls);
+      } else if (type === 'reel') {
+        result = await this._publishReel(message, mediaUrls[0]);
       } else if (type === 'carousel' || (mediaUrls && mediaUrls.length > 1)) {
         result = await this._publishCarousel(message, mediaUrls);
       } else {
         result = await this._publishNormal(message, mediaUrls, type);
+      }
+
+      // Strict Success Confirmation
+      if (!result || !result.id) {
+        throw new Error(`Facebook API returned a partial response. Post ID missing. Details: ${JSON.stringify(result)}`);
       }
 
       return result;
@@ -114,13 +86,57 @@ class FacebookService {
     }
   }
 
+  async _publishStory(message, mediaUrls) {
+    const storyMediaUrl = mediaUrls[0];
+    const isStoryVideo = storyMediaUrl && (
+      storyMediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)/i) || 
+      (typeof storyMediaUrl === 'string' && storyMediaUrl.includes('/video/upload/'))
+    );
+    
+    const storyEndpoint = isStoryVideo ? `${this.baseUrl}/${this.pageId}/video_stories` : `${this.baseUrl}/${this.pageId}/photo_stories`;
+    const storyData = isStoryVideo ? { video_url: storyMediaUrl } : { url: storyMediaUrl };
+    
+    logger.info(`[Facebook] Attempting Page Story publish. Endpoint: ${storyEndpoint}`);
+    
+    const response = await axios.post(storyEndpoint, storyData, {
+      params: { access_token: this.accessToken },
+    });
+    
+    return {
+      success: true,
+      id: response.data.id || response.data.post_id || response.data.video_id,
+      platform: 'facebook',
+      type: 'story'
+    };
+  }
+
+  async _publishReel(message, videoUrl) {
+    logger.info(`[Facebook] Attempting Page Reel publish. PageId: ${this.pageId}`);
+    
+    // Page Reels are published via the video_reels endpoint
+    const response = await axios.post(
+      `${this.baseUrl}/${this.pageId}/video_reels`,
+      {
+        description: message,
+        file_url: videoUrl,
+        upload_phase: 'finish', // Simple one-shot upload if supported, otherwise start/finish flow
+        video_state: 'PUBLISHED'
+      },
+      { params: { access_token: this.accessToken } }
+    );
+
+    return {
+      success: true,
+      id: response.data.id || response.data.video_id,
+      platform: 'facebook',
+      type: 'reel'
+    };
+  }
+
   async _publishNormal(message, mediaUrls = [], type = 'post') {
     const mediaUrl = mediaUrls[0];
-    
-    // Robust video detection
     const isVideo = mediaUrl && (
       mediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)/i) || 
-      type === 'reel' || 
       (typeof mediaUrl === 'string' && mediaUrl.includes('/video/upload/'))
     );
 
@@ -130,80 +146,54 @@ class FacebookService {
     if (mediaUrl && mediaUrl !== 'placeholder_media_url_for_now') {
       if (isVideo) {
         endpoint = `${this.baseUrl}/${this.pageId}/videos`;
-        data = {
-          description: message,
-          file_url: mediaUrl
-        };
-        logger.info(`Publishing video to Facebook: ${mediaUrl} to ${endpoint}`);
+        data = { description: message, file_url: mediaUrl };
       } else {
         endpoint = `${this.baseUrl}/${this.pageId}/photos`;
-        data = {
-          caption: message,
-          url: mediaUrl
-        };
-        logger.info(`Publishing photo to Facebook: ${mediaUrl} to ${endpoint}`);
+        data = { caption: message, url: mediaUrl };
       }
     }
 
-    const response = await axios.post(
-      endpoint,
-      data,
-      {
-        params: { access_token: this.accessToken },
-      }
-    );
+    const response = await axios.post(endpoint, data, {
+      params: { access_token: this.accessToken },
+    });
     
     return {
       success: true,
       id: response.data.id || response.data.post_id,
       platform: 'facebook',
-      type: isVideo ? 'video' : (mediaUrl ? 'photo' : 'text'),
-      endpoint: endpoint
+      type: isVideo ? 'video' : (mediaUrl ? 'photo' : 'text')
     };
   }
 
   async _publishCarousel(message, mediaUrls) {
-    try {
-      logger.info(`Publishing carousel to Facebook Page: ${this.pageId}. MediaCount: ${mediaUrls.length}`);
-      const attachedMedia = [];
-      for (const url of mediaUrls) {
-        const isVideo = url.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)/i);
-        if (isVideo) {
-          throw new Error('Facebook Graph API currently does not easily support mixing videos in carousels. Please use only images for Facebook carousels.');
-        }
-        
-        const photoRes = await axios.post(
-          `${this.baseUrl}/${this.pageId}/photos`,
-          {
-            url: url,
-            published: false
-          },
-          { params: { access_token: this.accessToken } }
-        );
-        attachedMedia.push({ media_fbid: photoRes.data.id });
-      }
-
-      const response = await axios.post(
-        `${this.baseUrl}/${this.pageId}/feed`,
-        {
-          message: message,
-          attached_media: attachedMedia
-        },
+    logger.info(`[Facebook] Attempting Carousel Fallback (Multi-Photo Feed). Count: ${mediaUrls.length}`);
+    const attachedMedia = [];
+    
+    for (const url of mediaUrls) {
+      // Step 1: Upload photo as unpublished
+      const photoRes = await axios.post(
+        `${this.baseUrl}/${this.pageId}/photos`,
+        { url: url, published: false },
         { params: { access_token: this.accessToken } }
       );
-
-      return {
-        success: true,
-        id: response.data.id,
-        platform: 'facebook',
-        type: 'carousel',
-        endpoint: `${this.baseUrl}/${this.pageId}/feed`
-      };
-    } catch (error) {
-      const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
-      logger.error(`Facebook _publishCarousel error: ${errDetail}`);
-      throw new Error(`Facebook Carousel error: ${errDetail}`);
+      
+      if (!photoRes.data.id) throw new Error('Failed to upload individual media item for carousel.');
+      attachedMedia.push({ media_fbid: photoRes.data.id });
     }
+
+    // Step 2: Publish feed post with attached media IDs
+    const response = await axios.post(
+      `${this.baseUrl}/${this.pageId}/feed`,
+      { message: message, attached_media: attachedMedia },
+      { params: { access_token: this.accessToken } }
+    );
+
+    return {
+      success: true,
+      id: response.data.id,
+      platform: 'facebook',
+      type: 'carousel'
+    };
   }
 
   async updateProfile(name, description) {

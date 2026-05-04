@@ -14,11 +14,13 @@ const platformExecutionSchema = new mongoose.Schema({
   externalPostId: String,
   errorMessage: String,
   humanMessage: String,
+  idempotencyKey: { type: String, index: true },
   formattedContent: {
     text: String,
     hashtags: [String],
     ctaText: String,
     link: String,
+    mediaUrls: [String],
   },
 }, { _id: false });
 

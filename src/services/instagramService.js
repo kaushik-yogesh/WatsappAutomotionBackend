@@ -24,18 +24,22 @@ class InstagramService {
    * @param {string[]} params.mediaUrls - Array of media URLs
    * @param {string} params.type - 'post', 'reel', 'story', 'carousel'
    */
+  /**
+   * Publish content to Instagram (Post, Reel, Story, or Carousel)
+   * Mandatory: Container creation -> Status polling -> Publish after FINISHED
+   */
   async publishPost(params) {
     const { caption, mediaUrls, type = 'post' } = params;
     try {
       if (!this.igAccountId) {
-        throw new Error('Instagram Account ID is missing');
+        throw new Error('Instagram Account ID is missing. Story and Business publishing requires a linked IG account.');
       }
 
       // Filter and validate media URLs
       const validMediaUrls = (mediaUrls || []).filter(url => url && typeof url === 'string' && url.trim() !== '' && url !== 'placeholder_media_url_for_now');
       
       if (validMediaUrls.length === 0) {
-        throw new Error('Instagram requires at least one valid image or video URL for publishing.');
+        throw new Error('Instagram requires at least one valid image or video URL.');
       }
 
       // Handle Carousel (Multiple media items)
@@ -47,9 +51,7 @@ class InstagramService {
       const isVideo = mediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm)/i) || type === 'reel';
       
       // 1. Create Media Container
-      const containerData = {
-        caption: caption,
-      };
+      const containerData = { caption };
 
       if (type === 'reel') {
         containerData.media_type = 'REELS';
@@ -68,7 +70,7 @@ class InstagramService {
         }
       }
 
-      logger.info(`Creating Instagram ${type} container...`);
+      logger.info(`[Instagram] Creating ${type} container...`);
       const containerResponse = await axios.post(
         `${this.baseUrl}/${this.igAccountId}/media`,
         containerData,
@@ -76,19 +78,20 @@ class InstagramService {
       );
 
       const creationId = containerResponse.data.id;
+      if (!creationId) throw new Error('Instagram failed to return a Container ID.');
 
-      // 2. Poll for status
-      logger.info(`Polling for Instagram ${type} container status (${creationId})...`);
+      // 2. Poll for FINISHED status
       await this._waitForMediaProcessing(creationId);
 
-
       // 3. Publish Media Container
-      logger.info(`Publishing Instagram ${type} (${creationId})...`);
+      logger.info(`[Instagram] Publishing ${type} container ${creationId}...`);
       const publishResponse = await axios.post(
         `${this.baseUrl}/${this.igAccountId}/media_publish`,
         { creation_id: creationId },
         { params: { access_token: this.accessToken } }
       );
+
+      if (!publishResponse.data.id) throw new Error('Instagram failed to return a Media ID after publishing.');
 
       return {
         success: true,
@@ -98,13 +101,14 @@ class InstagramService {
       };
     } catch (error) {
       const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
-      logger.error(`Instagram publishPost error: ${errDetail}`);
+      logger.error(`[Instagram] publishPost fatal error: ${errDetail}`);
       throw new Error(`Instagram API error: ${errDetail}`);
     }
   }
 
   /**
-   * Publish a carousel (multi-image/video post)
+   * Publish a carousel (multi-media post)
+   * Flow: Create children -> Poll children -> Create carousel container -> Poll carousel container -> Publish
    */
   async _publishCarousel(caption, mediaUrls) {
     try {
@@ -113,9 +117,7 @@ class InstagramService {
       // 1. Create children containers
       for (const url of mediaUrls) {
         const isVideo = url.match(/\.(mp4|mov|avi|wmv)$/i);
-        const childData = {
-          is_carousel_item: true,
-        };
+        const childData = { is_carousel_item: true };
 
         if (isVideo) {
           childData.media_type = 'VIDEO';
@@ -129,15 +131,16 @@ class InstagramService {
           childData,
           { params: { access_token: this.accessToken } }
         );
-        itemIds.push(childRes.data.id);
+        if (childRes.data.id) itemIds.push(childRes.data.id);
       }
 
-      // 2. Wait for all items to be processed
+      // 2. Wait for all children to be FINISHED
       for (const id of itemIds) {
         await this._waitForMediaProcessing(id);
       }
 
-      // 3. Create Carousel Container
+      // 3. Create Carousel (Master) Container
+      logger.info(`[Instagram] Creating carousel master container for ${itemIds.length} items...`);
       const carouselRes = await axios.post(
         `${this.baseUrl}/${this.igAccountId}/media`,
         {
@@ -149,13 +152,20 @@ class InstagramService {
       );
 
       const creationId = carouselRes.data.id;
+      if (!creationId) throw new Error('Instagram failed to return a Carousel Container ID.');
 
-      // 4. Publish Carousel
+      // 4. MUST poll the carousel container itself before publishing
+      await this._waitForMediaProcessing(creationId);
+
+      // 5. Publish Carousel
+      logger.info(`[Instagram] Publishing carousel master ${creationId}...`);
       const publishRes = await axios.post(
         `${this.baseUrl}/${this.igAccountId}/media_publish`,
         { creation_id: creationId },
         { params: { access_token: this.accessToken } }
       );
+
+      if (!publishRes.data.id) throw new Error('Instagram failed to return a Media ID after carousel publishing.');
 
       return {
         success: true,
@@ -165,16 +175,24 @@ class InstagramService {
       };
     } catch (error) {
       const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
-      logger.error(`Instagram _publishCarousel error: ${errDetail}`);
+      logger.error(`[Instagram] _publishCarousel fatal error: ${errDetail}`);
       throw new Error(`Instagram Carousel error: ${errDetail}`);
     }
   }
 
   /**
-   * Wait for media to be processed by Instagram
+   * Strict Polling Manager for Instagram Media Container Processing
+   * States: queued, processing, finished, failed, expired
    */
-  async _waitForMediaProcessing(creationId, maxRetries = 15) {
-    for (let i = 0; i < maxRetries; i++) {
+  async _waitForMediaProcessing(creationId) {
+    const intervals = [3000, 5000, 8000, 13000, 21000]; // Fibonacci-based backoff
+    let currentState = 'queued';
+
+    for (let i = 0; i < intervals.length; i++) {
+      const waitTime = intervals[i];
+      logger.info(`[Instagram] Polling container ${creationId}. State: ${currentState}. Next poll in ${waitTime}ms...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+
       try {
         const response = await axios.get(`${this.baseUrl}/${creationId}`, {
           params: {
@@ -183,22 +201,36 @@ class InstagramService {
           }
         });
 
-        const status = response.data.status_code;
-        if (status === 'FINISHED') {
-          return true;
-        } else if (status === 'ERROR') {
+        const statusCode = response.data.status_code;
+        
+        // Map Instagram states to requested logic
+        if (statusCode === 'FINISHED') {
+          logger.info(`[Instagram] Media processing FINISHED for container ${creationId}`);
+          return { state: 'finished', id: creationId };
+        }
+
+        if (statusCode === 'ERROR') {
+          logger.error(`[Instagram] Media processing FAILED for container ${creationId}: ${response.data.status}`);
           throw new Error(`Media processing failed: ${response.data.status || 'Unknown error'}`);
         }
+
+        if (statusCode === 'EXPIRED') {
+          logger.warn(`[Instagram] Media processing EXPIRED for container ${creationId}`);
+          throw new Error('Media processing expired. Container is no longer valid.');
+        }
+
+        // Default to processing state
+        currentState = 'processing';
         
-        logger.info(`Container ${creationId} status: ${status}. Retrying in 5s...`);
-        await new Promise(resolve => setTimeout(resolve, 5000));
       } catch (error) {
-        if (error.message.includes('Media processing failed')) throw error;
-        logger.warn(`Polling error (retry ${i}): ${error.message}`);
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        if (error.message.includes('failed') || error.message.includes('expired')) throw error;
+        logger.warn(`[Instagram] Polling transient error for ${creationId}: ${error.message}`);
       }
     }
-    throw new Error('Media processing timed out after 75 seconds. The post might still go live eventually.');
+
+    // Mark as failed on timeout
+    logger.error(`[Instagram] Media processing TIMEOUT for container ${creationId} after multiple attempts.`);
+    throw new Error('Media processing failed: Timeout reached during processing.');
   }
 
   async sendTextMessage(igAccountId, recipientId, text) {

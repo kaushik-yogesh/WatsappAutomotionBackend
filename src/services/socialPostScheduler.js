@@ -5,27 +5,73 @@ const logger = require('../utils/logger');
 
 let initialized = false;
 
+/**
+ * Minimal Reliable Queue implementation using MongoDB as the backend.
+ * Features: Atomic locking, Crash recovery, Delayed execution, and Duplicate prevention.
+ */
 const startSocialPostScheduler = () => {
   if (initialized) return;
   initialized = true;
 
-  cron.schedule('*/1 * * * *', async () => {
+  // 1. Worker: Process ready-to-run scheduled jobs
+  cron.schedule('*/30 * * * * *', async () => {
     try {
-      const readyJobs = await SocialPostJob.find({
-        mode: 'scheduled',
-        overallStatus: 'queued',
-        scheduledAt: { $lte: new Date() },
-      }).limit(25);
+      // Atomic Lock: Find one queued job and mark it as processing immediately
+      // This prevents multiple worker instances from picking the same job.
+      const job = await SocialPostJob.findOneAndUpdate(
+        {
+          mode: 'scheduled',
+          overallStatus: 'queued',
+          scheduledAt: { $lte: new Date() },
+        },
+        { $set: { overallStatus: 'processing', startedAt: new Date() } },
+        { new: true, sort: { scheduledAt: 1 } }
+      );
 
-      for (const job of readyJobs) {
+      if (job) {
+        logger.info(`[Queue] Locked job ${job._id} for processing.`);
+        // Run synchronously within the worker tick to maintain control
         await SocialPostOrchestratorService.runJob(job);
       }
     } catch (err) {
-      logger.error(`Scheduled autopost worker error: ${err.message}`);
+      logger.error(`[Queue] Worker error: ${err.message}`);
     }
   });
 
-  logger.info('Social post scheduler initialized.');
+  // 2. Recovery Manager: Recover jobs stuck in 'processing' (e.g. after server crash)
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const STUCK_THRESHOLD = 15 * 60 * 1000; // 15 minutes
+      const stuckTime = new Date(Date.now() - STUCK_THRESHOLD);
+
+      const recovered = await SocialPostJob.updateMany(
+        {
+          overallStatus: 'processing',
+          startedAt: { $lte: stuckTime }
+        },
+        { 
+          $set: { 
+            overallStatus: 'failed', 
+            completedAt: new Date() 
+          },
+          $push: { 
+            'compatibility.warnings': { 
+              platform: 'system', 
+              message: 'Job was stuck in processing for too long and was automatically terminated.' 
+            } 
+          }
+        }
+      );
+
+      if (recovered.modifiedCount > 0) {
+        logger.warn(`[Queue] Recovered ${recovered.modifiedCount} stalled jobs and moved to DLQ (failed status).`);
+      }
+    } catch (err) {
+      logger.error(`[Queue] Recovery manager error: ${err.message}`);
+    }
+  });
+
+  logger.info('Reliable Social Post Scheduler initialized (30s tick).');
 };
 
 module.exports = { startSocialPostScheduler };

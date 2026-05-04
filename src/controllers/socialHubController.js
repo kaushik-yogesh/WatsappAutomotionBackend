@@ -165,7 +165,7 @@ exports.publishContent = async (req, res, next) => {
       link,
       type,
     };
-    const compatibility = SocialPostOrchestratorService.validateCompatibility({
+    const compatibility = await SocialPostOrchestratorService.validateCompatibility({
       ...masterContent,
       platforms: platformConfigs,
     });
@@ -238,7 +238,7 @@ exports.validatePost = async (req, res, next) => {
     if (unresolved.length) {
       return next(new AppError(`Some selected accounts are no longer available: ${unresolved.join(', ')}`, 400));
     }
-    const data = SocialPostOrchestratorService.validateCompatibility({
+    const data = await SocialPostOrchestratorService.validateCompatibility({
       text: caption,
       mediaUrls: publicMediaUrls,
       hashtags,

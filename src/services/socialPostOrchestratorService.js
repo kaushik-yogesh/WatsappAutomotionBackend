@@ -5,11 +5,12 @@ const FacebookAccount = require('../models/FacebookAccount');
 const InstagramService = require('./instagramService');
 const FacebookService = require('./facebookService');
 const TelegramService = require('./telegramService');
+const CloudinaryService = require('./cloudinaryService');
+const crypto = require('crypto');
 const logger = require('../utils/logger');
 const { emitToUser } = require('../utils/socket');
 
 const MAX_GBP_TEXT = 1500;
-const BASE_RETRY_DELAY_MS = 2500;
 
 const normalizeHashtags = (hashtags = []) =>
   hashtags
@@ -77,6 +78,7 @@ const classifyError = (rawMessage = '') => {
 
   const isUnknownMeta = msg.includes('unknown error') || (msg.includes('code":1') && msg.includes('oauthexception'));
 
+  // Non-retryable: Auth & Session
   const tokenError =
     !isUnknownMeta &&
     (msg.includes('access token') ||
@@ -86,6 +88,17 @@ const classifyError = (rawMessage = '') => {
       msg.includes('reauthorize') ||
       msg.includes('reconnect'));
 
+  // Non-retryable: Permissions & Validation
+  const fatalError = 
+    msg.includes('permission') || 
+    msg.includes('unauthorized') || 
+    msg.includes('invalid') || 
+    msg.includes('unsupported') || 
+    msg.includes('requires at least one') || 
+    msg.includes('limit reached') || 
+    msg.includes('restricted');
+
+  // Retryable: Network, Timeout, 5xx, Transient
   const transient =
     isUnknownMeta ||
     msg.includes('timeout') ||
@@ -96,6 +109,7 @@ const classifyError = (rawMessage = '') => {
     msg.includes('enotfound') ||
     msg.includes('503') ||
     msg.includes('502') ||
+    msg.includes('500') ||
     msg.includes('429') ||
     msg.includes('rate limit') ||
     msg.includes('media is not ready') ||
@@ -103,11 +117,109 @@ const classifyError = (rawMessage = '') => {
 
   return {
     tokenError,
+    fatalError,
     transient,
   };
 };
 
 class SocialPostOrchestratorService {
+  static detectContentType(type, mediaUrls = []) {
+    let detectedType = 'text_only';
+    const videos = [];
+    const images = [];
+
+    for (const url of mediaUrls) {
+      if (!url) continue;
+      const isVid = /\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)$/i.test(url) || url.includes('/video/upload/');
+      if (isVid) videos.push(url);
+      else images.push(url);
+    }
+
+    const rawType = String(type || 'post').trim().toLowerCase();
+    if (rawType === 'reel') detectedType = 'reel';
+    else if (rawType === 'story') {
+      detectedType = videos.length > 0 ? 'story_video' : (images.length > 0 ? 'story_image' : 'text_only');
+    } else if (mediaUrls.length === 1) {
+      detectedType = videos.length === 1 ? 'video_single' : 'image_single';
+    } else if (mediaUrls.length > 1) {
+      if (videos.length > 0 && images.length > 0) detectedType = 'carousel_mixed';
+      else if (videos.length > 0) detectedType = 'carousel_video';
+      else detectedType = 'carousel_image';
+    }
+    return detectedType;
+  }
+
+  static resolveCapabilities({ content, platform, account }) {
+    const { mediaUrls = [], detectedType } = content;
+    const result = {
+      supported: true,
+      warnings: [],
+      fallback: null,
+      transformedType: detectedType
+    };
+
+    if (platform === 'instagram') {
+      if (detectedType === 'text_only') {
+        result.supported = false;
+        result.warnings.push('Instagram requires at least one image or video.');
+      }
+      if (detectedType.startsWith('carousel_')) {
+        result.transformedType = 'carousel'; // Native carousel
+        if (mediaUrls.length > 10) {
+          result.supported = false;
+          result.warnings.push('Instagram carousels are limited to 10 media items.');
+        }
+      }
+      if (detectedType.startsWith('story_')) {
+        result.transformedType = 'story'; // Stories natively
+        if (!account || !account.igAccountId) {
+          result.supported = false;
+          result.warnings.push('Instagram Stories are restricted to business accounts with a valid igAccountId.');
+        }
+      }
+      if (detectedType === 'reel') {
+        result.transformedType = 'reel';
+        const hasVideo = mediaUrls.some(url => /\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)$/i.test(url) || url.includes('/video/upload/'));
+        if (!hasVideo) {
+          result.supported = false;
+          result.warnings.push('Instagram Reel requires a valid video.');
+        }
+      }
+    } else if (platform === 'facebook') {
+      if (detectedType.startsWith('story_')) {
+        result.supported = false;
+        result.warnings.push('Facebook Page Story publishing is unsupported via this API.');
+      }
+      if (detectedType === 'carousel_image') {
+        result.fallback = 'multi_photo_post';
+        result.transformedType = 'post';
+        if (mediaUrls.length > 10) {
+          result.supported = false;
+          result.warnings.push('Facebook post attachments are limited to 10 media items.');
+        }
+      }
+      if (detectedType === 'carousel_mixed' || detectedType === 'carousel_video') {
+        result.supported = false;
+        result.warnings.push('Facebook Graph API does not support videos in multi-media posts.');
+      }
+    } else if (platform === 'telegram') {
+      if (detectedType.startsWith('story_')) {
+        result.supported = false;
+        result.warnings.push('Telegram does not support Story format.');
+      }
+      if (detectedType.startsWith('carousel_')) {
+        result.transformedType = 'post';
+      }
+    }
+
+    return result;
+  }
+
+  static getRetryDelay(attemptCount) {
+    const delays = [5000, 20000, 60000];
+    return delays[attemptCount - 1] || 60000;
+  }
+
   static async buildPlatformConfigs(userId, requestedPlatforms = []) {
     const configs = [];
     logger.info(`Building platform configs for user ${userId}. Requested: ${requestedPlatforms.length}`);
@@ -182,57 +294,74 @@ class SocialPostOrchestratorService {
     return configs;
   }
 
-  static validateCompatibility({ text = '', mediaUrls = [], hashtags = [], ctaText = '', link = '', type = 'post', platforms = [] }) {
+  static async validateCompatibility({ text = '', mediaUrls = [], hashtags = [], ctaText = '', link = '', type = 'post', platforms = [] }) {
     const warnings = [];
     const requiredFixes = [];
     const normalizedHashtags = normalizeHashtags(hashtags);
-    const mediaCount = (mediaUrls || []).filter(Boolean).length;
     const fullText = [text, ctaText, link].filter(Boolean).join('\n');
-    const normalizedType = normalizeType(type);
+    
+    const detectedType = this.detectContentType(type, mediaUrls);
+
+    const axios = require('axios');
+    const mediaErrors = [];
+    
+    await Promise.all((mediaUrls || []).map(async (url) => {
+      if (!url) return;
+      try {
+        const res = await axios.head(url, { timeout: 5000 });
+        const contentType = res.headers['content-type'] || '';
+        const contentLength = res.headers['content-length'] || 0;
+        
+        if (!contentType.startsWith('image/') && !contentType.startsWith('video/') && !contentType.includes('octet-stream')) {
+          mediaErrors.push(`MIME validation failed: ${url} has invalid type ${contentType}`);
+        }
+        if (contentLength && parseInt(contentLength) < 100) {
+          mediaErrors.push(`Corruption check failed: ${url} appears empty or corrupted`);
+        }
+      } catch (err) {
+        mediaErrors.push(`Accessibility check failed: Cannot reach media ${url} (${err.message})`);
+      }
+    }));
+
+    if (mediaErrors.length > 0) {
+      mediaErrors.forEach(msg => requiredFixes.push({ platform: 'system', message: msg }));
+    }
 
     platforms.forEach((p) => {
       if (p.status !== 'connected') {
-        requiredFixes.push({ platform: p.platform, message: 'Account is disconnected. Please reconnect before publishing.' });
+        requiredFixes.push({ platform: p.platform, message: `Account validation failed: Status is ${p.status}. Please reconnect.` });
       }
-
       if ((p.platform === 'instagram' || p.platform === 'facebook') && !p.accessToken) {
-        requiredFixes.push({ platform: p.platform, message: 'Access token missing. Please reconnect this account.' });
+        requiredFixes.push({ platform: p.platform, message: 'Token validation failed: Access token missing or expired.' });
       }
-
-      if (p.platform === 'instagram' && mediaCount === 0) {
-        requiredFixes.push({ platform: 'instagram', message: 'Instagram requires at least one image or video.' });
-      }
-
-      if (p.platform === 'instagram' && normalizedType === 'story' && mediaCount === 0) {
-        requiredFixes.push({ platform: 'instagram', message: 'Instagram Story requires media.' });
-      }
-
-      if (p.platform === 'facebook' && normalizedType === 'story') {
-        requiredFixes.push({ platform: 'facebook', message: 'Facebook Page Story publishing is not supported in this flow.' });
-      }
-
-      if (p.platform === 'telegram' && normalizedType === 'story') {
-        requiredFixes.push({ platform: 'telegram', message: 'Telegram does not support Story format. Use post format.' });
-      }
-
       if (p.platform === 'telegram' && !p.defaultChatId) {
-        requiredFixes.push({ platform: 'telegram', message: 'Telegram target chat/channel is missing. Reconnect with a default chat id.' });
+        requiredFixes.push({ platform: 'telegram', message: 'Account validation failed: Telegram target chat/channel is missing.' });
+      }
+      
+      const caps = this.resolveCapabilities({
+        content: { mediaUrls, detectedType },
+        platform: p.platform,
+        account: p
+      });
+
+      if (!caps.supported) {
+        caps.warnings.forEach(w => requiredFixes.push({ platform: p.platform, message: `Capability error: ${w}` }));
+      } else if (caps.warnings.length > 0) {
+        caps.warnings.forEach(w => warnings.push({ platform: p.platform, message: w }));
       }
 
       if (p.platform === 'google_business' && fullText.length > MAX_GBP_TEXT) {
         warnings.push({ platform: 'google_business', message: 'Google Business copy is long and will be trimmed.' });
       }
-
       if (p.platform === 'linkedin' && fullText.length < 30) {
         warnings.push({ platform: 'linkedin', message: 'LinkedIn posts perform better with more professional context.' });
       }
-
       if (normalizedHashtags.length > 12 && (p.platform === 'linkedin' || p.platform === 'facebook')) {
         warnings.push({ platform: p.platform, message: 'Too many hashtags may reduce readability on this platform.' });
       }
     });
 
-    return { warnings, requiredFixes, compatible: requiredFixes.length === 0 };
+    return { warnings, requiredFixes, compatible: requiredFixes.length === 0, detectedType };
   }
 
   static formatForPlatform({ platform, text = '', hashtags = [], ctaText = '', link = '' }) {
@@ -245,25 +374,6 @@ class SocialPostOrchestratorService {
       return {
         text: `${text}${lineCta}${lineLink}\n\n${normalizedHashtags.join(' ')}`.trim(),
         hashtags: normalizedHashtags,
-        ctaText,
-        link,
-      };
-    }
-
-    if (platform === 'linkedin') {
-      return {
-        text: `${text}\n\n${ctaText}${lineLink}\n\n${shortTags.join(' ')}`.trim(),
-        hashtags: shortTags,
-        ctaText,
-        link,
-      };
-    }
-
-    if (platform === 'google_business') {
-      const concise = `${text} ${ctaText}`.trim().slice(0, MAX_GBP_TEXT);
-      return {
-        text: `${concise}${lineLink}`.trim(),
-        hashtags: [],
         ctaText,
         link,
       };
@@ -296,19 +406,47 @@ class SocialPostOrchestratorService {
     };
 
     const platformIds = platforms.map((p) => p.platform);
-    const compatibility = this.validateCompatibility({ ...normalizedContent, platforms });
+    const compatibility = await this.validateCompatibility({ ...normalizedContent, platforms });
+    const detectedType = compatibility.detectedType || 'post';
 
-    const executions = platforms.map((p) => ({
-      platform: p.platform,
-      accountId: String(p.id),
-      accountName: p.name,
-      status: mode === 'instant' ? 'connecting' : 'pending',
-      formattedContent: this.formatForPlatform({ platform: p.platform, ...normalizedContent }),
-    }));
+    let preset = 'feed_portrait';
+    if (detectedType === 'reel') preset = 'reel_916';
+    else if (detectedType.startsWith('story_')) preset = 'story_916';
+    else if (detectedType === 'image_single' || detectedType === 'video_single') preset = 'feed_portrait';
+
+    const transformedMedia = (normalizedContent.mediaUrls || []).map(url => {
+      const result = CloudinaryService.transformMediaUrl(url, preset);
+      return result.url;
+    });
+
+    const contentHash = crypto
+      .createHash('md5')
+      .update(normalizedContent.text + (normalizedContent.mediaUrls || []).join(','))
+      .digest('hex');
+
+    const executions = platforms.map((p) => {
+      const scheduleTime = scheduledAt ? new Date(scheduledAt).getTime() : 'instant';
+      const idempotencyKey = `${userId}-${p.platform}-${contentHash}-${scheduleTime}`;
+
+      return {
+        platform: p.platform,
+        accountId: String(p.id),
+        accountName: p.name,
+        idempotencyKey,
+        status: mode === 'instant' ? 'connecting' : 'pending',
+        formattedContent: {
+          ...this.formatForPlatform({ platform: p.platform, ...normalizedContent }),
+          mediaUrls: transformedMedia
+        },
+      };
+    });
 
     return SocialPostJob.create({
       user: userId,
-      masterContent: normalizedContent,
+      masterContent: {
+        ...normalizedContent,
+        mediaUrls: transformedMedia
+      },
       mode,
       scheduledAt: mode === 'scheduled' ? scheduledAt : undefined,
       selectedPlatforms: platformIds,
@@ -358,14 +496,39 @@ class SocialPostOrchestratorService {
       this.emitStatus(jobDoc.user, jobDoc._id, exec);
       await jobDoc.save();
 
-      const mediaUrls = (jobDoc.masterContent.mediaUrls || []).filter(Boolean);
+      const mediaUrls = (exec.formattedContent.mediaUrls || jobDoc.masterContent.mediaUrls || []).filter(Boolean);
       const requestedType = normalizeType(jobDoc.masterContent.type || 'post');
-      const isTransientPlatform = exec.platform === 'instagram' || exec.platform === 'facebook';
-      const maxAttempts = isTransientPlatform ? 3 : 2;
+      const detectedType = this.detectContentType(jobDoc.masterContent.type || 'post', mediaUrls);
+      
+      const caps = this.resolveCapabilities({
+        content: { mediaUrls, detectedType },
+        platform: exec.platform,
+        account: config
+      });
+      const finalType = caps.supported ? caps.transformedType : requestedType;
+
+      const maxAttempts = 3;
+      const retryDelays = [5000, 20000, 60000];
 
       let lastError = null;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        if (exec.idempotencyKey) {
+          const alreadyPublished = await SocialPostJob.findOne({
+            'executions.idempotencyKey': exec.idempotencyKey,
+            'executions.status': 'success'
+          });
+          if (alreadyPublished) {
+            const otherExec = alreadyPublished.executions.find(e => e.idempotencyKey === exec.idempotencyKey);
+            exec.status = 'success';
+            exec.externalPostId = otherExec.externalPostId;
+            exec.humanMessage = 'Already published (idempotency).';
+            this.emitStatus(jobDoc.user, jobDoc._id, exec);
+            await jobDoc.save();
+            break;
+          }
+        }
+
         exec.attempts = (exec.attempts || 0) + 1;
 
         try {
@@ -373,23 +536,22 @@ class SocialPostOrchestratorService {
           exec.humanMessage = attempt > 1 ? `Retrying (attempt ${attempt}/${maxAttempts})...` : 'Publishing...';
           this.emitStatus(jobDoc.user, jobDoc._id, exec);
 
+          if (!caps.supported) {
+             throw new Error(caps.warnings[0] || 'Unsupported capabilities for this platform.');
+          }
+
           let result;
           if (exec.platform === 'instagram') {
             const ig = new InstagramService(config.accessToken, config.pageId, config.igAccountId);
-            const igType = requestedType === 'carousel' || mediaUrls.length > 1 ? 'carousel' : requestedType;
-            result = await ig.publishPost({ caption: exec.formattedContent.text, mediaUrls, type: igType });
+            result = await ig.publishPost({ caption: exec.formattedContent.text, mediaUrls, type: finalType });
           } else if (exec.platform === 'facebook') {
             const fb = new FacebookService(config.accessToken, config.pageId);
             result = await fb.publishToFacebook(config, {
               text: exec.formattedContent.text,
               mediaUrls,
-              type: requestedType,
+              type: finalType,
             });
           } else if (exec.platform === 'telegram') {
-            if (requestedType === 'story') {
-              throw new Error('Telegram does not support Story format. Use post format.');
-            }
-
             const tg = new TelegramService(config.botToken);
             const chatId = config.defaultChatId;
             if (!chatId) throw new Error('Telegram target chat/channel is missing.');
@@ -411,8 +573,6 @@ class SocialPostOrchestratorService {
             } else {
               result = await tg.sendTextMessage(chatId, exec.formattedContent.text);
             }
-          } else {
-            throw new Error(`Platform ${exec.platform} is not supported yet.`);
           }
 
           exec.status = 'success';
@@ -426,7 +586,7 @@ class SocialPostOrchestratorService {
           break;
         } catch (err) {
           const errorText = asErrorText(err);
-          const { tokenError, transient } = classifyError(errorText);
+          const { tokenError, fatalError, transient } = classifyError(errorText);
           lastError = errorText;
 
           if (tokenError) {
@@ -439,7 +599,7 @@ class SocialPostOrchestratorService {
             break;
           }
 
-          if (attempt >= maxAttempts || !transient) {
+          if (fatalError || attempt >= maxAttempts || !transient) {
             exec.status = 'failed';
             exec.errorMessage = errorText;
             exec.humanMessage = humanizeError(errorText);
@@ -448,7 +608,7 @@ class SocialPostOrchestratorService {
             break;
           }
 
-          const delay = BASE_RETRY_DELAY_MS * attempt;
+          const delay = retryDelays[attempt - 1] || 5000;
           exec.humanMessage = `Temporary issue detected, retrying in ${Math.round(delay / 1000)}s...`;
           this.emitStatus(jobDoc.user, jobDoc._id, exec);
           await jobDoc.save();
@@ -483,11 +643,14 @@ class SocialPostOrchestratorService {
   static emitStatus(userId, jobId, execution) {
     emitToUser(userId.toString(), 'social_publish_status', {
       jobId,
-      platform: execution.platform,
-      status: execution.status,
-      attempts: execution.attempts,
-      humanMessage: execution.humanMessage,
-      errorMessage: execution.errorMessage,
+      execution: {
+        platform: execution.platform,
+        status: execution.status,
+        attempts: execution.attempts,
+        humanMessage: execution.humanMessage,
+        errorMessage: execution.errorMessage,
+        externalPostId: execution.externalPostId
+      }
     });
   }
 
