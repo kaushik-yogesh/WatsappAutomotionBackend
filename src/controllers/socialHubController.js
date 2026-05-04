@@ -180,9 +180,19 @@ exports.publishContent = async (req, res, next) => {
     }
 
     const latest = await SocialPostJob.findById(job._id);
+    
+    if (latest.overallStatus === 'failed') {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Publishing failed on all platforms.',
+        data: latest,
+      });
+    }
+
     res.status(200).json({
-      status: 'success',
-      message: isScheduled ? 'Post scheduled successfully' : 'Publishing process completed',
+      status: latest.overallStatus === 'partially_failed' ? 'partially_failed' : 'success',
+      message: isScheduled ? 'Post scheduled successfully' : 
+               latest.overallStatus === 'partially_failed' ? 'Post published with some errors.' : 'Publishing process completed',
       data: latest,
     });
   } catch (err) {
@@ -249,6 +259,16 @@ exports.retryFailedPlatform = async (req, res, next) => {
       userId: req.user._id,
       platform,
     });
+
+    const exec = updated.executions.find(e => e.platform === platform);
+    if (exec && exec.status === 'failed') {
+      return res.status(400).json({
+        status: 'fail',
+        message: `Retry failed for ${platform}: ${exec.humanMessage || exec.errorMessage}`,
+        data: updated,
+      });
+    }
+
     res.status(200).json({ status: 'success', data: updated });
   } catch (err) {
     next(err);
