@@ -134,7 +134,10 @@ class FacebookService {
         `${this.baseUrl}/${this.pageId}/video_reels`,
         { upload_phase: 'start' },
         { params: { access_token: this.accessToken } }
-      );
+      ).catch(e => {
+        logger.error(`[Facebook] Reel Step 1 (START) failed: ${e.message}`);
+        throw e;
+      });
 
       const videoId = startRes.data?.video_id;
       const uploadUrl = startRes.data?.upload_url;
@@ -147,15 +150,18 @@ class FacebookService {
       logger.info(`[Facebook] Reel Step 2: Downloading video from source: ${videoUrl}`);
       const videoResponse = await axios.get(videoUrl, {
         responseType: 'arraybuffer',
-        timeout: 90000,
+        timeout: 120000, // Increased to 2 mins for large videos
         maxRedirects: 10,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8',
+          'Accept': '*/*',
         },
+      }).catch(e => {
+        logger.error(`[Facebook] Reel Step 2 (Download) failed: ${e.message} (Code: ${e.code})`);
+        throw e;
       });
 
-      if (!videoResponse.data || videoResponse.data.byteLength === 0) {
+      if (!videoResponse.data || (videoResponse.data.length === 0 && videoResponse.data.byteLength === 0)) {
         throw new Error(`Video download returned empty content. Status: ${videoResponse.status}`);
       }
 
@@ -175,7 +181,10 @@ class FacebookService {
         },
         maxBodyLength: Infinity,
         maxContentLength: Infinity,
-        timeout: 180000,
+        timeout: 240000, // 4 mins for upload
+      }).catch(e => {
+        logger.error(`[Facebook] Reel Step 3 (Upload Bytes) failed: ${e.message}`);
+        throw e;
       });
       logger.info(`[Facebook] Reel Step 3 SUCCESS. Video transferred.`);
 
@@ -190,7 +199,10 @@ class FacebookService {
           description: message,
         },
         { params: { access_token: this.accessToken } }
-      );
+      ).catch(e => {
+        logger.error(`[Facebook] Reel Step 4 (FINISH) failed: ${e.message}`);
+        throw e;
+      });
       
       logger.info(`[Facebook] Reel Step 4 SUCCESS. Reel published.`);
 
@@ -201,13 +213,20 @@ class FacebookService {
         type: 'reel'
       };
     } catch (err) {
-      // Deeper error inspection for the resumable flow
-      const errData = err.response?.data;
-      const errMsg = Buffer.isBuffer(errData) || errData instanceof ArrayBuffer 
-        ? Buffer.from(errData).toString('utf8') 
-        : JSON.stringify(errData || err.message);
+      // Improved error message extraction
+      let errMsg = '';
+      if (err.response?.data) {
+        const d = err.response.data;
+        errMsg = (Buffer.isBuffer(d) || d instanceof ArrayBuffer) 
+          ? Buffer.from(d).toString('utf8') 
+          : JSON.stringify(d);
+      } else {
+        errMsg = err.message || err.code || 'Unknown network/internal error';
+      }
       
-      logger.error(`[Facebook] _publishReel flow failed: ${errMsg}`);
+      logger.error(`[Facebook] _publishReel FATAL flow failure: ${errMsg}`);
+      if (err.stack) logger.error(err.stack);
+      
       throw new Error(`Facebook Reel flow error: ${errMsg}`);
     }
   }
