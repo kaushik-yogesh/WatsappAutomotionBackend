@@ -56,6 +56,7 @@ class InstagramService {
       if (type === 'reel') {
         containerData.media_type = 'REELS';
         containerData.video_url = mediaUrl;
+        containerData.share_to_feed = true; // Essential for Reel visibility
       } else if (type === 'story') {
         containerData.media_type = 'STORIES';
         if (isVideo) containerData.video_url = mediaUrl;
