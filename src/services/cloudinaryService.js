@@ -114,7 +114,8 @@ class CloudinaryService {
       resource_type: rType,
       type: type,
       transformation: [transformation],
-      secure: true
+      secure: true,
+      sign_url: true
     });
 
     let thumbnailUrl = null;

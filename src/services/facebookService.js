@@ -217,9 +217,12 @@ class FacebookService {
       let errMsg = '';
       if (err.response?.data) {
         const d = err.response.data;
-        errMsg = (Buffer.isBuffer(d) || d instanceof ArrayBuffer) 
+        const bodyStr = (Buffer.isBuffer(d) || d instanceof ArrayBuffer) 
           ? Buffer.from(d).toString('utf8') 
-          : JSON.stringify(d);
+          : (typeof d === 'object' ? JSON.stringify(d) : String(d));
+        
+        // Fallback to err.message if body is empty or too short
+        errMsg = bodyStr && bodyStr.length > 2 ? bodyStr : (err.message || err.code);
       } else {
         errMsg = err.message || err.code || 'Unknown network/internal error';
       }
