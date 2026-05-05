@@ -80,7 +80,15 @@ class FacebookService {
 
       return result;
     } catch (error) {
-      const errDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      let errDetail;
+      if (error.response?.data) {
+        const d = error.response.data;
+        errDetail = Buffer.isBuffer(d)
+          ? `HTTP ${error.response.status} — ${d.toString('utf8') || '(empty response)'}`
+          : JSON.stringify(d);
+      } else {
+        errDetail = error.message;
+      }
       logger.error(`[Facebook] publishPost FATAL error: ${errDetail}`);
       throw new Error(`Facebook API error: ${errDetail}`);
     }
@@ -129,8 +137,22 @@ class FacebookService {
     logger.info(`[Facebook] Reel Step 1 SUCCESS. video_id: ${videoId}, upload_url: ${uploadUrl ? 'received' : 'missing'}`);
 
     // Step 2: Download video from source URL and upload bytes to Facebook's upload_url
-    logger.info(`[Facebook] Reel Step 2: Downloading video from source...`);
-    const videoResponse = await axios.get(videoUrl, { responseType: 'arraybuffer', timeout: 60000 });
+    logger.info(`[Facebook] Reel Step 2: Downloading video from source: ${videoUrl}`);
+    const videoResponse = await axios.get(videoUrl, {
+      responseType: 'arraybuffer',
+      timeout: 60000,
+      maxRedirects: 10,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; FacebookBot/1.0)',
+        'Accept': 'video/mp4,video/*;q=0.9,*/*;q=0.8',
+        'Accept-Encoding': 'identity',
+      },
+    });
+
+    if (!videoResponse.data || videoResponse.data.byteLength === 0) {
+      throw new Error(`Video download returned empty content from URL: ${videoUrl}. Status: ${videoResponse.status}`);
+    }
+
     const videoBuffer = Buffer.from(videoResponse.data);
     const fileSize = videoBuffer.length;
     logger.info(`[Facebook] Reel Step 2: Video downloaded. Size: ${fileSize} bytes. Uploading to Facebook...`);
