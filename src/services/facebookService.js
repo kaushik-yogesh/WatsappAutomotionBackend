@@ -111,9 +111,9 @@ class FacebookService {
   }
 
   async _publishReel(message, videoUrl) {
-    logger.info(`[Facebook] Attempting Page Reel publish (2-step flow). PageId: ${this.pageId}`);
+    logger.info(`[Facebook] Attempting Page Reel publish (resumable upload). PageId: ${this.pageId}`);
 
-    // Step 1: Initialize upload — get video_id
+    // Step 1: Initialize — get video_id + upload_url
     logger.info(`[Facebook] Reel Step 1: Initializing upload session (START)...`);
     const startRes = await axios.post(
       `${this.baseUrl}/${this.pageId}/video_reels`,
@@ -122,13 +122,35 @@ class FacebookService {
     );
 
     const videoId = startRes.data?.video_id;
+    const uploadUrl = startRes.data?.upload_url;
     if (!videoId) {
-      throw new Error(`Facebook Reel upload init failed — no video_id returned. Response: ${JSON.stringify(startRes.data)}`);
+      throw new Error(`Facebook Reel START failed — no video_id. Response: ${JSON.stringify(startRes.data)}`);
     }
-    logger.info(`[Facebook] Reel Step 1 SUCCESS. video_id: ${videoId}`);
+    logger.info(`[Facebook] Reel Step 1 SUCCESS. video_id: ${videoId}, upload_url: ${uploadUrl ? 'received' : 'missing'}`);
 
-    // Step 2: Finish & publish with file_url
-    logger.info(`[Facebook] Reel Step 2: Publishing reel (FINISH) with file_url...`);
+    // Step 2: Download video from source URL and upload bytes to Facebook's upload_url
+    logger.info(`[Facebook] Reel Step 2: Downloading video from source...`);
+    const videoResponse = await axios.get(videoUrl, { responseType: 'arraybuffer', timeout: 60000 });
+    const videoBuffer = Buffer.from(videoResponse.data);
+    const fileSize = videoBuffer.length;
+    logger.info(`[Facebook] Reel Step 2: Video downloaded. Size: ${fileSize} bytes. Uploading to Facebook...`);
+
+    const targetUploadUrl = uploadUrl || `https://rupload.facebook.com/video-upload/v${this.apiVersion}/${videoId}`;
+    await axios.post(targetUploadUrl, videoBuffer, {
+      headers: {
+        'Authorization': `OAuth ${this.accessToken}`,
+        'offset': '0',
+        'file_size': String(fileSize),
+        'Content-Type': 'application/octet-stream',
+      },
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+      timeout: 120000,
+    });
+    logger.info(`[Facebook] Reel Step 2 SUCCESS. Video bytes uploaded to Facebook.`);
+
+    // Step 3: Finish & publish
+    logger.info(`[Facebook] Reel Step 3: Publishing reel (FINISH)...`);
     const finishRes = await axios.post(
       `${this.baseUrl}/${this.pageId}/video_reels`,
       {
@@ -136,11 +158,10 @@ class FacebookService {
         video_id: videoId,
         video_state: 'PUBLISHED',
         description: message,
-        file_url: videoUrl,
       },
       { params: { access_token: this.accessToken } }
     );
-    logger.info(`[Facebook] Reel Step 2 SUCCESS. Reel published. Response: ${JSON.stringify(finishRes.data)}`);
+    logger.info(`[Facebook] Reel Step 3 SUCCESS. Response: ${JSON.stringify(finishRes.data)}`);
 
     return {
       success: true,
