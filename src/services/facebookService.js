@@ -111,23 +111,52 @@ class FacebookService {
   }
 
   async _publishReel(message, videoUrl) {
-    logger.info(`[Facebook] Attempting Page Reel publish. PageId: ${this.pageId}`);
-    
-    // Page Reels are published via the video_reels endpoint
-    const response = await axios.post(
+    logger.info(`[Facebook] Attempting Page Reel publish (3-step flow). PageId: ${this.pageId}`);
+
+    // Step 1: Initialize upload — get video_id
+    logger.info(`[Facebook] Reel Step 1: Initializing upload session...`);
+    const startRes = await axios.post(
       `${this.baseUrl}/${this.pageId}/video_reels`,
-      {
-        description: message,
-        file_url: videoUrl,
-        upload_phase: 'finish', // Simple one-shot upload if supported, otherwise start/finish flow
-        video_state: 'PUBLISHED'
-      },
+      { upload_phase: 'start' },
       { params: { access_token: this.accessToken } }
     );
 
+    const videoId = startRes.data?.video_id;
+    if (!videoId) {
+      throw new Error(`Facebook Reel upload init failed — no video_id returned. Response: ${JSON.stringify(startRes.data)}`);
+    }
+    logger.info(`[Facebook] Reel Step 1 SUCCESS. video_id: ${videoId}`);
+
+    // Step 2: Upload video via file_url
+    logger.info(`[Facebook] Reel Step 2: Uploading video from URL...`);
+    await axios.post(
+      `${this.baseUrl}/${this.pageId}/video_reels`,
+      {
+        upload_phase: 'transfer',
+        video_id: videoId,
+        file_url: videoUrl,
+      },
+      { params: { access_token: this.accessToken } }
+    );
+    logger.info(`[Facebook] Reel Step 2 SUCCESS. Video transferred.`);
+
+    // Step 3: Finish & publish
+    logger.info(`[Facebook] Reel Step 3: Publishing reel...`);
+    const finishRes = await axios.post(
+      `${this.baseUrl}/${this.pageId}/video_reels`,
+      {
+        upload_phase: 'finish',
+        video_id: videoId,
+        video_state: 'PUBLISHED',
+        description: message,
+      },
+      { params: { access_token: this.accessToken } }
+    );
+    logger.info(`[Facebook] Reel Step 3 SUCCESS. Reel published.`);
+
     return {
       success: true,
-      id: response.data.id || response.data.video_id,
+      id: finishRes.data?.post_id || finishRes.data?.video_id || videoId,
       platform: 'facebook',
       type: 'reel'
     };
