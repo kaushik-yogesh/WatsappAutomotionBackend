@@ -111,10 +111,10 @@ class FacebookService {
   }
 
   async _publishReel(message, videoUrl) {
-    logger.info(`[Facebook] Attempting Page Reel publish (3-step flow). PageId: ${this.pageId}`);
+    logger.info(`[Facebook] Attempting Page Reel publish (2-step flow). PageId: ${this.pageId}`);
 
     // Step 1: Initialize upload — get video_id
-    logger.info(`[Facebook] Reel Step 1: Initializing upload session...`);
+    logger.info(`[Facebook] Reel Step 1: Initializing upload session (START)...`);
     const startRes = await axios.post(
       `${this.baseUrl}/${this.pageId}/video_reels`,
       { upload_phase: 'start' },
@@ -127,21 +127,8 @@ class FacebookService {
     }
     logger.info(`[Facebook] Reel Step 1 SUCCESS. video_id: ${videoId}`);
 
-    // Step 2: Upload video via file_url
-    logger.info(`[Facebook] Reel Step 2: Uploading video from URL...`);
-    await axios.post(
-      `${this.baseUrl}/${this.pageId}/video_reels`,
-      {
-        upload_phase: 'transfer',
-        video_id: videoId,
-        file_url: videoUrl,
-      },
-      { params: { access_token: this.accessToken } }
-    );
-    logger.info(`[Facebook] Reel Step 2 SUCCESS. Video transferred.`);
-
-    // Step 3: Finish & publish
-    logger.info(`[Facebook] Reel Step 3: Publishing reel...`);
+    // Step 2: Finish & publish with file_url
+    logger.info(`[Facebook] Reel Step 2: Publishing reel (FINISH) with file_url...`);
     const finishRes = await axios.post(
       `${this.baseUrl}/${this.pageId}/video_reels`,
       {
@@ -149,10 +136,11 @@ class FacebookService {
         video_id: videoId,
         video_state: 'PUBLISHED',
         description: message,
+        file_url: videoUrl,
       },
       { params: { access_token: this.accessToken } }
     );
-    logger.info(`[Facebook] Reel Step 3 SUCCESS. Reel published.`);
+    logger.info(`[Facebook] Reel Step 2 SUCCESS. Reel published. Response: ${JSON.stringify(finishRes.data)}`);
 
     return {
       success: true,
