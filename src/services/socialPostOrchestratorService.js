@@ -130,7 +130,7 @@ class SocialPostOrchestratorService {
 
     for (const url of mediaUrls) {
       if (!url) continue;
-      const isVid = /\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)$/i.test(url) || url.includes('/video/upload/');
+      const isVid = /\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)(?:\?|$|#)/i.test(url) || url.toLowerCase().includes('/video/') || url.toLowerCase().includes('resource_type=video') || url.toLowerCase().includes('/video');
       if (isVid) videos.push(url);
       else images.push(url);
     }
@@ -179,7 +179,7 @@ class SocialPostOrchestratorService {
       }
       if (detectedType === 'reel') {
         result.transformedType = 'reel';
-        const hasVideo = mediaUrls.some(url => /\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)$/i.test(url) || url.includes('/video/upload/'));
+        const hasVideo = mediaUrls.some(url => /\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)(?:\?|$|#)/i.test(url) || url.toLowerCase().includes('/video/') || url.toLowerCase().includes('resource_type=video') || url.toLowerCase().includes('/video'));
         if (!hasVideo) {
           result.supported = false;
           result.warnings.push('Instagram Reel requires a valid video.');

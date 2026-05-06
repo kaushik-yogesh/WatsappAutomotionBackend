@@ -48,7 +48,7 @@ class InstagramService {
       }
 
       const mediaUrl = validMediaUrls[0];
-      const isVideo = mediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm)/i) || type === 'reel';
+      const isVideo = mediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)(?:\?|$)/i) || mediaUrl.includes('/video/') || type === 'reel';
       
       // 1. Create Media Container
       const containerData = { caption };
@@ -117,7 +117,7 @@ class InstagramService {
 
       // 1. Create children containers
       for (const url of mediaUrls) {
-        const isVideo = url.match(/\.(mp4|mov|avi|wmv)$/i);
+        const isVideo = url.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)(?:\?|$)/i) || url.includes('/video/');
         const childData = { is_carousel_item: true };
 
         if (isVideo) {

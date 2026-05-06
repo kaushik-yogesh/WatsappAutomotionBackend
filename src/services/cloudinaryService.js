@@ -85,7 +85,7 @@ class CloudinaryService {
       return { url, thumbnailUrl: null };
     }
 
-    const isVideo = /\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)$/i.test(url) || url.includes('/video/upload/');
+    const isVideo = /\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)(?:\?|$)/i.test(url) || url.includes('/video/');
     const rType = isVideo ? 'video' : 'image';
 
     let publicId = url;

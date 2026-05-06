@@ -103,8 +103,8 @@ class FacebookService {
   async _publishStory(message, mediaUrls) {
     const storyMediaUrl = mediaUrls[0];
     const isStoryVideo = storyMediaUrl && (
-      storyMediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)/i) || 
-      (typeof storyMediaUrl === 'string' && storyMediaUrl.includes('/video/upload/'))
+      storyMediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)(?:\?|$)/i) || 
+      (typeof storyMediaUrl === 'string' && storyMediaUrl.includes('/video/'))
     );
     
     const storyEndpoint = isStoryVideo ? `${this.baseUrl}/${this.pageId}/video_stories` : `${this.baseUrl}/${this.pageId}/photo_stories`;
@@ -237,8 +237,8 @@ class FacebookService {
   async _publishNormal(message, mediaUrls = [], type = 'post') {
     const mediaUrl = mediaUrls[0];
     const isVideo = mediaUrl && (
-      mediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)/i) || 
-      (typeof mediaUrl === 'string' && mediaUrl.includes('/video/upload/'))
+      mediaUrl.match(/\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)(?:\?|$)/i) || 
+      (typeof mediaUrl === 'string' && mediaUrl.includes('/video/'))
     );
 
     let endpoint = `${this.baseUrl}/${this.pageId}/feed`;
