@@ -335,8 +335,26 @@ class FacebookService {
         saves: null
       };
     } catch (error) {
-      logger.error(`Facebook getInsights error: ${error.message}`);
-      return { likes: 0, comments: 0, shares: 0, views: null, saves: null };
+      logger.warn(`Facebook getInsights full fields failed for ${postId}: ${error.response?.data?.error?.message || error.message}`);
+      // Fallback: try only likes and comments without shares (sometimes shares throw 403 on specific media types)
+      try {
+        const fbFallback = await axios.get(`${this.baseUrl}/${postId}`, {
+          params: {
+            fields: 'likes.summary(true),comments.summary(true)',
+            access_token: this.accessToken
+          }
+        });
+        return {
+          likes: fbFallback.data.likes?.summary?.total_count || 0,
+          comments: fbFallback.data.comments?.summary?.total_count || 0,
+          shares: null,
+          views: null,
+          saves: null
+        };
+      } catch (err2) {
+         logger.error(`Facebook getInsights fallback error for ${postId}: ${err2.response?.data?.error?.message || err2.message}`);
+         return { likes: null, comments: null, shares: null, views: null, saves: null, error: true };
+      }
     }
   }
 

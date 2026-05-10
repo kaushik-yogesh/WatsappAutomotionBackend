@@ -314,39 +314,55 @@ class InstagramService {
    */
   async getInsights(mediaId) {
     try {
-      const response = await axios.get(`${this.baseUrl}/${mediaId}`, {
+      // First try to get basic engagement which usually works without special permissions
+      const basicResponse = await axios.get(`${this.baseUrl}/${mediaId}`, {
         params: {
-          fields: 'like_count,comments_count,insights.metric(impressions,reach,saved)',
+          fields: 'like_count,comments_count,media_type,media_product_type',
           access_token: this.accessToken
         }
       });
       
-      const likes = response.data.like_count || 0;
-      const comments = response.data.comments_count || 0;
-      
+      const likes = basicResponse.data.like_count || 0;
+      const comments = basicResponse.data.comments_count || 0;
+      const isReel = basicResponse.data.media_product_type === 'REELS';
+
       let views = null;
       let saves = null;
       let shares = null;
       
-      if (response.data.insights && response.data.insights.data) {
-        const metrics = response.data.insights.data;
-        const impressions = metrics.find(m => m.name === 'impressions');
-        if (impressions) views = impressions.values[0].value;
+      // Now try to fetch advanced insights if possible
+      try {
+        // REELS support different metrics: plays, reach, saved, shares
+        // Standard posts support: impressions, reach, saved
+        const metrics = isReel ? 'plays,saved,shares' : 'impressions,saved';
         
-        const saved = metrics.find(m => m.name === 'saved');
-        if (saved) saves = saved.values[0].value;
+        const insightsRes = await axios.get(`${this.baseUrl}/${mediaId}/insights`, {
+          params: {
+            metric: metrics,
+            access_token: this.accessToken
+          }
+        });
+        
+        if (insightsRes.data && insightsRes.data.data) {
+          const data = insightsRes.data.data;
+          const impressions = data.find(m => m.name === 'impressions' || m.name === 'plays');
+          if (impressions && impressions.values?.length) views = impressions.values[0].value;
+          
+          const saved = data.find(m => m.name === 'saved');
+          if (saved && saved.values?.length) saves = saved.values[0].value;
+          
+          const sharesMetric = data.find(m => m.name === 'shares');
+          if (sharesMetric && sharesMetric.values?.length) shares = sharesMetric.values[0].value;
+        }
+      } catch (insightErr) {
+        logger.warn(`Instagram insights advanced fetch failed for ${mediaId}: ${insightErr.response?.data?.error?.message || insightErr.message}`);
+        // Soft fail, we still have basic metrics
       }
       
-      return {
-        likes,
-        comments,
-        shares,
-        views,
-        saves
-      };
+      return { likes, comments, shares, views, saves };
     } catch (error) {
-      logger.error(`Instagram getInsights error: ${error.message}`);
-      return { likes: 0, comments: 0, shares: null, views: null, saves: null };
+      logger.error(`Instagram getInsights fallback error for ${mediaId}: ${error.response?.data?.error?.message || error.message}`);
+      return { likes: null, comments: null, shares: null, views: null, saves: null, error: true };
     }
   }
 
