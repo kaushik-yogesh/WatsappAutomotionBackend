@@ -633,15 +633,15 @@ exports.getInsights = async (req, res, next) => {
     if (platform === 'facebook') {
       let acc;
       if (accountId.startsWith('fb_native_')) {
-        acc = await FacebookAccount.findById(accountId.replace('fb_native_', ''));
+        acc = await FacebookAccount.findById(accountId.replace('fb_native_', '')).select('+pageAccessToken +pageId');
       } else if (accountId.startsWith('fb_')) {
-        acc = await InstagramAccount.findById(accountId.replace('fb_', ''));
+        acc = await InstagramAccount.findById(accountId.replace('fb_', '')).select('+pageAccessToken +pageId');
       } else {
-        acc = await FacebookAccount.findById(accountId);
-        if (!acc) acc = await InstagramAccount.findById(accountId);
+        acc = await FacebookAccount.findById(accountId).select('+pageAccessToken +pageId');
+        if (!acc) acc = await InstagramAccount.findById(accountId).select('+pageAccessToken +pageId');
       }
       
-      if (!acc) throw new Error('Account not found');
+      if (!acc || !acc.pageAccessToken) throw new Error('Account or Access Token not found');
       accessToken = acc.pageAccessToken;
       pageId = acc.pageId;
       
@@ -650,8 +650,8 @@ exports.getInsights = async (req, res, next) => {
       return res.status(200).json({ status: 'success', data });
       
     } else if (platform === 'instagram') {
-      const acc = await InstagramAccount.findById(accountId);
-      if (!acc) throw new Error('Account not found');
+      const acc = await InstagramAccount.findById(accountId).select('+pageAccessToken +pageId +igAccountId');
+      if (!acc || !acc.pageAccessToken) throw new Error('Account or Access Token not found');
       accessToken = acc.pageAccessToken;
       pageId = acc.pageId;
       igAccountId = acc.igAccountId;
