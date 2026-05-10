@@ -18,5 +18,6 @@ router.post('/upload', socialHubController.uploadMedia);
 router.get('/feed', socialHubController.getFeed);
 router.patch('/update-job/:jobId', socialHubController.updateScheduledJob);
 router.post('/delete-post', socialHubController.deletePost);
+router.get('/insights', socialHubController.getInsights);
 
 module.exports = router;

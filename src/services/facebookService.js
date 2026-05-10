@@ -312,6 +312,35 @@ class FacebookService {
   }
 
   /**
+   * Get post insights
+   */
+  async getInsights(postId) {
+    try {
+      const response = await axios.get(`${this.baseUrl}/${postId}`, {
+        params: {
+          fields: 'likes.summary(true),comments.summary(true),shares',
+          access_token: this.accessToken
+        }
+      });
+      
+      const likes = response.data.likes?.summary?.total_count || 0;
+      const comments = response.data.comments?.summary?.total_count || 0;
+      const shares = response.data.shares?.count || 0;
+      
+      return {
+        likes,
+        comments,
+        shares,
+        views: null,
+        saves: null
+      };
+    } catch (error) {
+      logger.error(`Facebook getInsights error: ${error.message}`);
+      return { likes: 0, comments: 0, shares: 0, views: null, saves: null };
+    }
+  }
+
+  /**
    * Get recent posts for the Facebook Page
    */
   async getMedia() {

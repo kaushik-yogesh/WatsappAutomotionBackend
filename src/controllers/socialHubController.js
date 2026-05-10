@@ -614,4 +614,55 @@ exports.updateScheduledJob = async (req, res, next) => {
   }
 };
 
+// ─── Get Post Insights ─────────────────────────────────────────────────────────
+exports.getInsights = async (req, res, next) => {
+  try {
+    const { platform, postId, accountId } = req.query;
+    
+    if (!platform || !postId || !accountId) {
+      return res.status(400).json({ status: 'fail', message: 'Platform, postId, and accountId are required' });
+    }
 
+    let accessToken;
+    let pageId;
+    let igAccountId;
+
+    const InstagramAccount = require('../models/InstagramAccount');
+    const FacebookAccount = require('../models/FacebookAccount');
+
+    if (platform === 'facebook') {
+      let acc;
+      if (accountId.startsWith('fb_native_')) {
+        acc = await FacebookAccount.findById(accountId.replace('fb_native_', ''));
+      } else if (accountId.startsWith('fb_')) {
+        acc = await InstagramAccount.findById(accountId.replace('fb_', ''));
+      } else {
+        acc = await FacebookAccount.findById(accountId);
+        if (!acc) acc = await InstagramAccount.findById(accountId);
+      }
+      
+      if (!acc) throw new Error('Account not found');
+      accessToken = acc.pageAccessToken;
+      pageId = acc.pageId;
+      
+      const fbService = new (require('../services/facebookService'))(accessToken, pageId);
+      const data = await fbService.getInsights(postId);
+      return res.status(200).json({ status: 'success', data });
+      
+    } else if (platform === 'instagram') {
+      const acc = await InstagramAccount.findById(accountId);
+      if (!acc) throw new Error('Account not found');
+      accessToken = acc.pageAccessToken;
+      pageId = acc.pageId;
+      igAccountId = acc.igAccountId;
+      
+      const igService = new (require('../services/instagramService'))(accessToken, pageId, igAccountId);
+      const data = await igService.getInsights(postId);
+      return res.status(200).json({ status: 'success', data });
+    } else {
+      return res.status(400).json({ status: 'fail', message: 'Unsupported platform for insights' });
+    }
+  } catch (err) {
+    next(err);
+  }
+};

@@ -310,6 +310,47 @@ class InstagramService {
   }
 
   /**
+   * Get post insights
+   */
+  async getInsights(mediaId) {
+    try {
+      const response = await axios.get(`${this.baseUrl}/${mediaId}`, {
+        params: {
+          fields: 'like_count,comments_count,insights.metric(impressions,reach,saved)',
+          access_token: this.accessToken
+        }
+      });
+      
+      const likes = response.data.like_count || 0;
+      const comments = response.data.comments_count || 0;
+      
+      let views = null;
+      let saves = null;
+      let shares = null;
+      
+      if (response.data.insights && response.data.insights.data) {
+        const metrics = response.data.insights.data;
+        const impressions = metrics.find(m => m.name === 'impressions');
+        if (impressions) views = impressions.values[0].value;
+        
+        const saved = metrics.find(m => m.name === 'saved');
+        if (saved) saves = saved.values[0].value;
+      }
+      
+      return {
+        likes,
+        comments,
+        shares,
+        views,
+        saves
+      };
+    } catch (error) {
+      logger.error(`Instagram getInsights error: ${error.message}`);
+      return { likes: 0, comments: 0, shares: null, views: null, saves: null };
+    }
+  }
+
+  /**
    * Get recent media for the Instagram Business Account
    */
   async getMedia() {
