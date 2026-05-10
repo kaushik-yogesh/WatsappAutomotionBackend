@@ -291,3 +291,56 @@ exports.updateSystemSetting = async (req, res, next) => {
     next(err);
   }
 };
+
+const fs = require('fs');
+const path = require('path');
+const readline = require('readline');
+
+/**
+ * Get system logs
+ */
+exports.getSystemLogs = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit) || 200;
+    const logs = [];
+
+    const readLogFile = async (filename) => {
+      const filePath = path.join(process.cwd(), 'logs', filename);
+      if (!fs.existsSync(filePath)) return;
+      
+      const fileStream = fs.createReadStream(filePath);
+      const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+      
+      for await (const line of rl) {
+        if (line.trim()) {
+          try {
+            logs.push({ ...JSON.parse(line), sourceFile: filename });
+          } catch (e) {}
+        }
+      }
+    };
+
+    await readLogFile('publish.log');
+    await readLogFile('error.log');
+
+    // Sort by timestamp descending
+    logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    const uniqueLogs = [];
+    const seen = new Set();
+    for (const log of logs) {
+      const key = `${log.timestamp}-${log.level}-${log.message}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueLogs.push(log);
+      }
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: { logs: uniqueLogs.slice(0, limit) }
+    });
+  } catch (err) {
+    next(err);
+  }
+};

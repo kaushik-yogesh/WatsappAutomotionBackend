@@ -17,4 +17,6 @@ router.get('/health', adminController.getSystemHealth);
 router.get('/settings', adminController.getSystemSettings);
 router.patch('/settings', adminController.updateSystemSetting);
 
+router.get('/logs', adminController.getSystemLogs);
+
 module.exports = router;
