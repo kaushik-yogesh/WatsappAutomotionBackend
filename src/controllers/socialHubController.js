@@ -452,11 +452,10 @@ exports.getFeed = async (req, res, next) => {
 
     const feed = await SocialMediaHubService.getFeed(platformConfigs);
 
-    // Fetch jobs from database (scheduled, failed, partially_failed)
+    // Fetch jobs from database
     const jobs = await SocialPostJob.find({
       user: req.user._id,
-      overallStatus: { $in: ['queued', 'failed', 'partially_failed', 'processing'] },
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: -1 }).limit(200);
 
     const mappedJobs = jobs.map(job => ({
       id: job._id,
