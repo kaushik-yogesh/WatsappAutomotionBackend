@@ -33,7 +33,10 @@ module.exports = (err, req, res, next) => {
   err.statusCode = err.statusCode || 500;
   err.status = err.status || 'error';
 
-  logger.error(`${err.statusCode} - ${err.message} - ${req.originalUrl}`);
+  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress;
+  const userId = req.user ? req.user._id : 'unauthenticated';
+
+  logger.error(`${err.statusCode} - ${err.message} - ${req.originalUrl}`, { ip, userId });
 
   if (process.env.NODE_ENV === 'development') {
     sendErrorDev(err, res);

@@ -111,6 +111,22 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
+// Custom request logger for system logs (captures IP and User ID)
+app.use((req, res, next) => {
+  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress;
+  res.on('finish', () => {
+    // Skip noisy logs like health checks
+    if (req.originalUrl === '/health') return;
+    
+    logger.info(`${req.method} ${req.originalUrl} ${res.statusCode}`, {
+      ip,
+      userId: req.user ? req.user._id : 'unauthenticated',
+      userAgent: req.get('user-agent')
+    });
+  });
+  next();
+});
+
 // ─── Health Check ─────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.status(200).json({
