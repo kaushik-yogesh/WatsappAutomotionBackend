@@ -215,6 +215,22 @@ exports.updateBotSettings = async (req, res, next) => {
 
     if (!account) return next(new AppError('Account not found', 404));
 
+    // Force refresh Meta Webhook subscription to ensure 'comments' field is active
+    if (commentBotEnabled) {
+      try {
+        const apiVersion = process.env.META_API_VERSION || 'v19.0';
+        await axios.post(`https://graph.facebook.com/${apiVersion}/${account.pageId}/subscribed_apps`, null, {
+          params: {
+            subscribed_fields: 'messages,messaging_postbacks,comments',
+            access_token: account.pageAccessToken
+          }
+        });
+        logger.info(`Force-refreshed webhook subscription for page ${account.pageId}`);
+      } catch (err) {
+        logger.warn(`Failed to refresh Meta subscription: ${err.response?.data?.error?.message || err.message}`);
+      }
+    }
+
     res.status(200).json({
       status: 'success',
       message: 'Bot settings updated successfully',
