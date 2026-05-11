@@ -1,7 +1,7 @@
 const express = require('express');
 const fraudAdminController = require('../controllers/fraudAdminController');
-// Assuming authMiddleware contains protect and restrictTo
-const { protect, restrictTo } = require('../middleware/authMiddleware');
+// Assuming auth contains protect and restrictTo
+const { protect, restrictTo } = require('../middleware/auth');
 
 const router = express.Router();
 
