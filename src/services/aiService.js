@@ -230,15 +230,20 @@ IMPORTANT: Keep responses concise and relevant. Avoid long paragraphs. Use minim
       //   maxTokens: agent.maxTokens,
       // });
     } catch (error) {
-      logger.error('Primary failed:', err.message);
+      logger.error('Primary AI generation failed:', error.message);
 
       // 2️⃣ ONLY fallback → OpenRouter
-      return await this.generateOpenRouter({
-        model: 'openai/gpt-4o-mini',
-        messages,
-        temperature: agent.temperature,
-        maxTokens: agent.maxTokens,
-      });
+      try {
+        return await this.generateOpenRouter({
+          model: 'openai/gpt-4o-mini',
+          messages,
+          temperature: agent.temperature,
+          maxTokens: agent.maxTokens,
+        });
+      } catch (fallbackErr) {
+        logger.error('Fallback AI generation also failed:', fallbackErr.message);
+        throw fallbackErr;
+      }
     }
 
 
