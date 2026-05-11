@@ -1,4 +1,5 @@
 const fraudDetectionService = require('../services/fraudDetectionService');
+const { sendEmail, emailTemplates } = require('../services/emailService');
 const logger = require('../utils/logger');
 const rateLimit = require('express-rate-limit');
 
@@ -67,12 +68,18 @@ const checkFraudRisk = async (req, res, next) => {
         }
         
         // Generate OTP and return instructions
-        // In reality, this should trigger an email/SMS to the user
         const { otp, signedToken: newToken } = await fraudDetectionService.generateOTP(email || ip, ip);
         
-        // Log OTP in development (in production, send via email/SMS)
-        if (process.env.NODE_ENV !== 'production') {
-          logger.info(`DEV ONLY - Generated OTP for ${email || ip}: ${otp}`);
+        if (email) {
+          try {
+            const template = emailTemplates.otpChallenge(otp, ip);
+            await sendEmail({ to: email, ...template });
+            logger.info(`OTP Challenge sent to ${email} for IP ${ip}`);
+          } catch (err) {
+            logger.error(`Failed to send OTP to ${email}:`, err.message);
+          }
+        } else {
+          logger.info(`DEV ONLY - Generated OTP for IP ${ip}: ${otp} (No email provided)`);
         }
 
         return res.status(403).json({

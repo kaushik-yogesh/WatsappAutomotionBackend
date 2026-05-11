@@ -66,6 +66,19 @@ const emailTemplates = {
       <p>You can now use all features. Thank you for subscribing.</p>
     </div>`,
   }),
+
+  otpChallenge: (otpCode, ip) => ({
+    subject: 'Security Alert: Login Verification Required',
+    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto">
+      <h2>Security Verification Required</h2>
+      <p>We detected a suspicious login attempt from IP address: <strong>${ip}</strong></p>
+      <p>To verify it's you, please use the following One-Time Password (OTP):</p>
+      <div style="background:#f4f4f5;padding:20px;text-align:center;font-size:32px;letter-spacing:10px;font-weight:bold;color:#18181b;border-radius:12px;margin:24px 0;">
+        ${otpCode}
+      </div>
+      <p style="color:#71717a;font-size:14px;">This code expires in 5 minutes. If this wasn't you, please reset your password immediately.</p>
+    </div>`,
+  }),
 };
 
 module.exports = { sendEmail, emailTemplates };
