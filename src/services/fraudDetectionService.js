@@ -186,12 +186,12 @@ class FraudDetectionService {
     // 2. Check Failed Logins
     if (email) {
       const failedCount = await this.getFailedLogins(ip, email);
-      if (failedCount > 5) {
-        score += 85; // Instantly trigger OTP threshold for demonstration/security
-        reasons.push('Multiple failed login attempts (>5)');
-      } else if (failedCount >= 3) {
-        score += 60; // Trigger Captcha threshold
-        reasons.push('Some failed login attempts');
+      if (failedCount >= 4) {
+        score += 85; // Trigger OTP threshold on 4th recorded failure (5th attempt)
+        reasons.push('Multiple failed login attempts');
+      } else if (failedCount >= 2) {
+        score += 60; // Trigger Captcha threshold on 2nd recorded failure (3rd attempt)
+        reasons.push('Repeated login failures');
       }
     }
 
