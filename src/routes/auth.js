@@ -4,9 +4,10 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const { validate, schemas } = require('../middleware/validation');
+const { checkFraudRisk, strictAuthLimiter } = require('../middleware/fraudDetectionMiddleware');
 
-router.post('/register', validate(schemas.register), authController.register);
-router.post('/login', validate(schemas.login), authController.login);
+router.post('/register', strictAuthLimiter, checkFraudRisk, validate(schemas.register), authController.register);
+router.post('/login', strictAuthLimiter, checkFraudRisk, validate(schemas.login), authController.login);
 router.post('/refresh-token', authController.refreshToken);
 router.post('/logout', authController.logout);
 router.get('/verify-email/:token', authController.verifyEmail);

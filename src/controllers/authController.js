@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const AppError = require('../utils/AppError');
 const { sendEmail, emailTemplates } = require('../services/emailService');
+const fraudDetectionService = require('../services/fraudDetectionService');
 const logger = require('../utils/logger');
 
 const signToken = (id) =>
@@ -60,23 +61,21 @@ exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email }).select('+password +loginAttempts +lockUntil +subscription +usage');
-    if (!user) return next(new AppError('Invalid email or password.', 401));
+    const user = await User.findOne({ email }).select('+password +subscription +usage');
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-    if (user.isLocked()) {
-      return next(new AppError('Account locked due to too many failed attempts. Try again after 2 hours.', 401));
+    if (!user) {
+      await fraudDetectionService.recordFailedLogin(ip, email);
+      return next(new AppError('Invalid email or password.', 401));
     }
 
     const isCorrect = await user.correctPassword(password);
     if (!isCorrect) {
-      await user.incLoginAttempts();
+      await fraudDetectionService.recordFailedLogin(ip, email);
       return next(new AppError('Invalid email or password.', 401));
     }
 
-    // Reset login attempts on success
-    if (user.loginAttempts > 0) {
-      await user.updateOne({ $set: { loginAttempts: 0 }, $unset: { lockUntil: 1 } });
-    }
+    await fraudDetectionService.recordSuccessfulLogin(ip, email);
 
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });

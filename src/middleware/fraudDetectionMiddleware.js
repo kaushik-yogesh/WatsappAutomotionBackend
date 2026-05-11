@@ -5,7 +5,7 @@ const rateLimit = require('express-rate-limit');
 // Strict rate limiter for auth endpoints
 const strictAuthLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs
+  max: 20, // High enough to allow the custom Risk Scoring Engine to trigger CAPTCHA/OTP at 5 failed attempts
   message: { status: 'error', message: 'Too many auth attempts from this IP. Please try again after 5 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,

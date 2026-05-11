@@ -30,9 +30,7 @@ const protect = async (req, res, next) => {
       return next(new AppError('Your account has been deactivated. Contact support.', 401));
     }
 
-    if (user.isLocked()) {
-      return next(new AppError('Account temporarily locked due to too many failed login attempts.', 401));
-    }
+    // Legacy lock check removed in favor of Redis-based fraud detection
 
     req.user = user;
     next();
