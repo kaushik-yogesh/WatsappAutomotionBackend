@@ -1,20 +1,38 @@
 const { createClient } = require('redis');
 const logger = require('../utils/logger');
 
-// Define Redis URL
-const REDIS_URL = process.env.REDIS_URL;
+// Retrieve and sanitize Redis URL (handles accidental quotes or REDIS_URL= prefix pasted in dashboard)
+let rawUrl = process.env.REDIS_URL || '';
+if (rawUrl) {
+  rawUrl = rawUrl.trim();
+  if (rawUrl.startsWith('REDIS_URL=')) {
+    rawUrl = rawUrl.replace(/^REDIS_URL=/, '');
+  }
+  rawUrl = rawUrl.replace(/^"|"$/g, '').replace(/^'|'$/g, '');
+}
+
+const REDIS_URL = rawUrl || null;
+
+// Validate URL format gracefully to prevent ERR_INVALID_URL crashing the server
+let isValidUrl = false;
+try {
+  if (REDIS_URL) {
+    new URL(REDIS_URL);
+    isValidUrl = true;
+  }
+} catch (e) {
+  logger.error(`Provided REDIS_URL is fundamentally malformed: ${REDIS_URL}`);
+}
 
 // Configure Redis Client with a reconnect strategy
 const redisClient = createClient({
-  url: REDIS_URL || 'redis://127.0.0.1:6379',
+  url: isValidUrl ? REDIS_URL : 'redis://127.0.0.1:6379',
   socket: {
     reconnectStrategy: (retries) => {
-      // Reconnect after 5 seconds, max 20 attempts
       if (retries > 20) {
-        logger.error('Redis max reconnection attempts reached. Please check your REDIS_URL environment variable.');
+        logger.error('Redis max reconnection attempts reached. Please check your REDIS_URL.');
         return new Error('Max reconnection attempts reached');
       }
-      // Wait 5 seconds before retrying to prevent log spam
       return 5000;
     }
   }
@@ -23,7 +41,7 @@ const redisClient = createClient({
 // Avoid logging connection errors repeatedly if we don't have a valid remote URL in prod
 redisClient.on('error', (err) => {
   if (err.code === 'ECONNREFUSED') {
-    logger.error(`Redis connection refused at ${REDIS_URL || '127.0.0.1:6379'}. Ensure Redis is running and REDIS_URL is correctly set in your environment variables.`);
+    logger.error(`Redis connection refused. Ensure Redis is running and REDIS_URL is correctly set.`);
   } else {
     logger.error('Redis Client Error:', err.message);
   }
@@ -35,8 +53,8 @@ redisClient.on('ready', () => logger.info('Redis Client Ready to receive command
 // Auto-connect
 (async () => {
   try {
-    if (!REDIS_URL && process.env.NODE_ENV === 'production') {
-      logger.warn('WARNING: REDIS_URL is not set in production. Attempting to connect to localhost, which will likely fail on cloud providers.');
+    if (!isValidUrl && process.env.NODE_ENV === 'production') {
+      logger.warn('WARNING: Valid REDIS_URL is missing in production. Application will start but fraud logic will fail.');
     }
     await redisClient.connect();
   } catch (err) {
