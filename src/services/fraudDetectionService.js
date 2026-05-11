@@ -1,0 +1,276 @@
+const crypto = require('crypto');
+const axios = require('axios');
+const jwt = require('jsonwebtoken');
+const logger = require('../utils/logger');
+const redisClient = require('../config/redisClient');
+const FraudEvent = require('../models/FraudEvent');
+
+const DISPOSABLE_DOMAINS = new Set([
+  'mailinator.com', '10minutemail.com', 'guerrillamail.com', 'tempmail.com', 'yopmail.com'
+]);
+
+class FraudDetectionService {
+  constructor() {
+    this.SCORE_THRESHOLDS = {
+      LOW: 30,
+      MEDIUM: 60,
+      HIGH: 85,
+      CRITICAL: 100
+    };
+    
+    // Configurable window sizes
+    this.VELOCITY_WINDOW = 60; // seconds
+    this.FAILED_LOGIN_WINDOW = 15 * 60; // 15 mins
+    this.DEVICE_HISTORY_WINDOW = 30 * 24 * 60 * 60; // 30 days
+  }
+
+  /**
+   * Generates a secure OTP, stores in Redis, returns signed JWT.
+   */
+  async generateOTP(email, ip) {
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+    
+    const key = `otp:${email}:${ip}`;
+    // Store in Redis for 5 minutes (300s)
+    await redisClient.setEx(key, 300, otpHash);
+
+    // Sign a token to return to the user to provide with the OTP
+    const signedToken = jwt.sign({ email, ip, purpose: 'otp_verification' }, process.env.JWT_SECRET || 'fallback_secret', { expiresIn: '5m' });
+
+    return { otp, signedToken };
+  }
+
+  /**
+   * Verifies an OTP based on the signed token.
+   */
+  async verifyOTP(signedToken, providedOtp) {
+    try {
+      const decoded = jwt.verify(signedToken, process.env.JWT_SECRET || 'fallback_secret');
+      if (decoded.purpose !== 'otp_verification') return false;
+
+      const { email, ip } = decoded;
+      const key = `otp:${email}:${ip}`;
+      
+      const storedHash = await redisClient.get(key);
+      if (!storedHash) return false; // Expired or doesn't exist
+
+      const providedHash = crypto.createHash('sha256').update(providedOtp).digest('hex');
+      if (storedHash === providedHash) {
+        // One-time use: delete from Redis
+        await redisClient.del(key);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      logger.error('OTP Verification Error:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Checks real IP Geolocation via IPinfo (or falls back gracefully)
+   */
+  async getGeolocation(ip) {
+    // Basic local/private IP bypass
+    if (ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.')) {
+      return { country: 'Local', vpn: false, loc: '0,0' };
+    }
+    
+    try {
+      const cacheKey = `geo:${ip}`;
+      const cached = await redisClient.get(cacheKey);
+      if (cached) return JSON.parse(cached);
+
+      // Call IPinfo (Using unauthenticated endpoint for demonstration, needs IPINFO_TOKEN in prod)
+      const token = process.env.IPINFO_TOKEN ? `?token=${process.env.IPINFO_TOKEN}` : '';
+      const response = await axios.get(`https://ipinfo.io/${ip}/json${token}`, { timeout: 2000 });
+      
+      const data = {
+        country: response.data.country,
+        region: response.data.region,
+        loc: response.data.loc, // "lat,lng"
+        vpn: response.data.privacy?.vpn || response.data.privacy?.proxy || false
+      };
+
+      // Cache for 24 hours
+      await redisClient.setEx(cacheKey, 86400, JSON.stringify(data));
+      return data;
+    } catch (error) {
+      logger.warn(`Failed to fetch IP geolocation for ${ip}: ${error.message}`);
+      return { country: 'Unknown', vpn: false, loc: '0,0' };
+    }
+  }
+
+  /**
+   * Checks if device is new for the user
+   */
+  async checkDeviceHistory(email, deviceId) {
+    if (!email || !deviceId) return true; // Assume new if missing
+
+    const key = `device:${email}`;
+    const knownDevices = await redisClient.sMembers(key);
+    
+    if (knownDevices.includes(deviceId)) {
+      return false; // Not a new device
+    }
+
+    // Add new device to history
+    await redisClient.sAdd(key, deviceId);
+    await redisClient.expire(key, this.DEVICE_HISTORY_WINDOW);
+    return true; // Is a new device
+  }
+
+  /**
+   * Tracks incoming requests to calculate velocity using Redis.
+   */
+  async trackVelocity(ip) {
+    const key = `rate:${ip}`;
+    const count = await redisClient.incr(key);
+    if (count === 1) {
+      await redisClient.expire(key, this.VELOCITY_WINDOW);
+    }
+    return count; // Requests per minute
+  }
+
+  async recordFailedLogin(ip, email) {
+    const key = `failed_login:${ip}:${email}`;
+    const count = await redisClient.incr(key);
+    if (count === 1) {
+      await redisClient.expire(key, this.FAILED_LOGIN_WINDOW);
+    }
+    return count;
+  }
+
+  async recordSuccessfulLogin(ip, email) {
+    await redisClient.del(`failed_login:${ip}:${email}`);
+  }
+
+  async getFailedLogins(ip, email) {
+    const val = await redisClient.get(`failed_login:${ip}:${email}`);
+    return val ? parseInt(val, 10) : 0;
+  }
+
+  isDisposableEmail(email) {
+    if (!email) return false;
+    const domain = email.split('@')[1]?.toLowerCase();
+    return DISPOSABLE_DOMAINS.has(domain);
+  }
+
+  /**
+   * Detects bot-like behavior.
+   */
+  detectBotBehavior(userAgent) {
+    if (!userAgent) return 30; // Missing User-Agent
+    const uaLower = userAgent.toLowerCase();
+    if (/curl|postman|bot|scraper|spider|headless|puppeteer|playwright/i.test(uaLower)) {
+      return 30;
+    }
+    return 0;
+  }
+
+  /**
+   * Main function to calculate risk score.
+   */
+  async calculateRiskScore({ userId, ip, email, deviceId, userAgent }) {
+    let score = 0;
+    const reasons = [];
+
+    // 1. Check Request Velocity
+    const velocity = await this.trackVelocity(ip);
+    if (velocity > 100) {
+      score += 20;
+      reasons.push(`High request velocity (${velocity}/min)`);
+    }
+
+    // 2. Check Failed Logins
+    if (email) {
+      const failedCount = await this.getFailedLogins(ip, email);
+      if (failedCount > 5) {
+        score += 30;
+        reasons.push('Multiple failed login attempts (>5)');
+      } else if (failedCount >= 3) {
+        score += 15;
+        reasons.push('Some failed login attempts');
+      }
+    }
+
+    // 3. Bot Detection
+    const botScore = this.detectBotBehavior(userAgent);
+    if (botScore > 0) {
+      score += botScore;
+      reasons.push('Suspicious or missing user-agent');
+    }
+
+    // 4. Geolocation & VPN/Proxy
+    const geoData = await this.getGeolocation(ip);
+    if (geoData.vpn) {
+      score += 20;
+      reasons.push('VPN or Proxy detected');
+    }
+
+    // Impossible Travel check
+    if (email && geoData.loc !== '0,0') {
+      const lastLocKey = `last_loc:${email}`;
+      const lastLoc = await redisClient.get(lastLocKey);
+      if (lastLoc && lastLoc !== geoData.loc) {
+        // Simplified impossible travel (just checking if lat/lng changed)
+        // A true implementation would calculate distance and time difference
+        score += 25;
+        reasons.push('Impossible travel / sudden location change');
+      }
+      await redisClient.setEx(lastLocKey, 86400 * 7, geoData.loc);
+    }
+
+    // 5. Disposable Email
+    if (this.isDisposableEmail(email)) {
+      score += 25;
+      reasons.push('Disposable email detected');
+    }
+
+    // 6. Device History
+    const isNewDevice = await this.checkDeviceHistory(email, deviceId);
+    if (isNewDevice && email) {
+      score += 15;
+      reasons.push('Login from new device');
+    }
+
+    // Temporary Block Check
+    const isBlocked = await redisClient.get(`block:${ip}`);
+    if (isBlocked) {
+      score = 100;
+      reasons.push('IP is temporarily blocked');
+    }
+
+    score = Math.min(score, 100);
+    const action = this.determineAction(score);
+
+    // Save Fraud Event to MongoDB asynchronously
+    FraudEvent.create({
+      userId,
+      email,
+      ip,
+      deviceId,
+      location: `${geoData.country} - ${geoData.region}`,
+      riskScore: score,
+      reasons,
+      action
+    }).catch(err => logger.error('Failed to save FraudEvent:', err.message));
+
+    // Auto-block IP if critical
+    if (action === 'block' && !isBlocked) {
+      await redisClient.setEx(`block:${ip}`, 3600, 'blocked'); // block for 1 hour
+    }
+
+    return { score, reasons, action };
+  }
+
+  determineAction(score) {
+    if (score >= this.SCORE_THRESHOLDS.CRITICAL) return 'block';
+    if (score >= this.SCORE_THRESHOLDS.HIGH) return 'require_otp';
+    if (score >= this.SCORE_THRESHOLDS.MEDIUM) return 'require_captcha';
+    return 'allow';
+  }
+}
+
+module.exports = new FraudDetectionService();

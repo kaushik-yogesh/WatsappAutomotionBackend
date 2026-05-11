@@ -27,6 +27,7 @@ const socialHubRoutes = require('./routes/socialHub');
 const aiRoutes = require('./routes/ai');
 const notificationRoutes = require('./routes/notifications');
 const adminRoutes = require('./routes/admin');
+const fraudAdminRoutes = require('./routes/fraudAdmin');
 const { checkMaintenance } = require('./middleware/maintenance');
 const { healthMonitor } = require('./middleware/healthMonitor');
 
@@ -153,6 +154,7 @@ app.use('/api/social-hub', socialHubRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/fraud-admin', fraudAdminRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────
 app.all('*', (req, res, next) => {
