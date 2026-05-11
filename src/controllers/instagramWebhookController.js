@@ -23,6 +23,9 @@ exports.verifyWebhook = (req, res) => {
 };
 
 exports.receiveMessage = async (req, res) => {
+  // 1. Immediate Heartbeat Log to verify connectivity
+  logger.info(`>>> INSTAGRAM WEBHOOK ENDPOINT HIT: ${req.method} ${req.originalUrl}`);
+  
   res.status(200).send('EVENT_RECEIVED'); // Always respond 200 immediately
 
   try {
