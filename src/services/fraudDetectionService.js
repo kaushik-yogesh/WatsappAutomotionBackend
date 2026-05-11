@@ -187,10 +187,10 @@ class FraudDetectionService {
     if (email) {
       const failedCount = await this.getFailedLogins(ip, email);
       if (failedCount > 5) {
-        score += 30;
+        score += 85; // Instantly trigger OTP threshold for demonstration/security
         reasons.push('Multiple failed login attempts (>5)');
       } else if (failedCount >= 3) {
-        score += 15;
+        score += 60; // Trigger Captcha threshold
         reasons.push('Some failed login attempts');
       }
     }
@@ -245,17 +245,19 @@ class FraudDetectionService {
     score = Math.min(score, 100);
     const action = this.determineAction(score);
 
-    // Save Fraud Event to MongoDB asynchronously
-    FraudEvent.create({
-      userId,
-      email,
-      ip,
-      deviceId,
-      location: `${geoData.country} - ${geoData.region}`,
-      riskScore: score,
-      reasons,
-      action
-    }).catch(err => logger.error('Failed to save FraudEvent:', err.message));
+    // Save Fraud Event to MongoDB asynchronously ONLY if there's actual suspicious behavior
+    if (score > 0) {
+      FraudEvent.create({
+        userId,
+        email,
+        ip,
+        deviceId,
+        location: `${geoData.country} - ${geoData.region || 'Unknown'}`,
+        riskScore: score,
+        reasons,
+        action
+      }).catch(err => logger.error('Failed to save FraudEvent:', err.message));
+    }
 
     // Auto-block IP if critical
     if (action === 'block' && !isBlocked) {
