@@ -318,17 +318,12 @@ async function handleInstagramComment(commentData, igAccount, agent) {
     let enabled = igAccount.commentBotEnabled;
     let systemPrompt = igAccount.commentBotPrompt;
 
-    // If not enabled specifically, check if an agent exists (legacy support)
-    if (!enabled && agent) {
-      // For now, let's say if an agent exists, we allow it to handle comments unless explicitly disabled
-      // But user asked for a "bot", so let's prioritize the specific toggle.
-      // logger.info("Account specific bot not enabled, checking agent...");
-    }
-
     if (!enabled) {
-      logger.info(`Comment bot disabled for account: ${igAccount.igUsername || igAccount.igAccountId}`);
+      logger.info(`[COMMENT SKIP]: Bot is disabled in settings for account: ${igAccount.igUsername || igAccount.igAccountId}`);
       return;
     }
+
+    logger.info(`[COMMENT PROCESSING]: Found enabled bot for ${igAccount.igUsername}. Generating reply for: "${text}"`);
 
     // 2. Generate AI response
     const contextMessages = [];
