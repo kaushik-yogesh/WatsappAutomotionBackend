@@ -46,6 +46,7 @@ exports.callback = async (req, res, next) => {
     });
   } catch (err) {
     logger.error('YouTube OAuth callback error:', err);
+    if (err.isOperational) return next(err);
     next(new AppError('Failed to connect YouTube account', 500));
   }
 };

@@ -1,6 +1,7 @@
 const axios = require('axios');
 const logger = require('../utils/logger');
 const User = require('../models/User');
+const AppError = require('../utils/AppError');
 
 class YoutubeProvider {
   constructor(accessToken, refreshToken = null, expiry = null) {
@@ -210,6 +211,9 @@ class YoutubeProvider {
    * Helper to connect YouTube (exchanges code for tokens)
    */
   static async connectYouTube(code) {
+    if (!code) {
+      throw new AppError('No authorization code provided', 400);
+    }
     try {
       const response = await axios.post('https://oauth2.googleapis.com/token', {
         client_id: process.env.GOOGLE_CLIENT_ID,
@@ -233,8 +237,15 @@ class YoutubeProvider {
         channelName: channel.channelName,
       };
     } catch (error) {
-      logger.error('Error connecting YouTube:', error.response?.data || error.message);
-      throw error;
+      const errorData = error.response?.data || error.message;
+      logger.error('Error connecting YouTube:', errorData);
+      
+      // Map Google errors to more readable AppErrors
+      if (error.response?.data?.error === 'invalid_grant') {
+        throw new AppError('The authorization code is invalid or has expired. Please try connecting again.', 400);
+      }
+      
+      throw new AppError(`Failed to connect YouTube: ${typeof errorData === 'string' ? errorData : JSON.stringify(errorData)}`, 500);
     }
   }
 }

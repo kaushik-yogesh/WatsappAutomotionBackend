@@ -186,10 +186,17 @@ const server = app.listen(PORT, () => {
 initSocket(server);
 startSocialPostScheduler();
 
-// Graceful shutdown
 process.on('unhandledRejection', (err) => {
-  logger.error('UNHANDLED REJECTION:', err.message);
-  server.close(() => process.exit(1));
+  logger.error('UNHANDLED REJECTION! 💥 Shutting down...', err);
+  // In production, we should exit and let the process manager (PM2/Render) restart it
+  if (process.env.NODE_ENV === 'production') {
+    server.close(() => process.exit(1));
+  }
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error('UNCAUGHT EXCEPTION! 💥 Shutting down...', err);
+  process.exit(1);
 });
 
 process.on('SIGTERM', () => {
