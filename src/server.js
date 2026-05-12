@@ -140,6 +140,14 @@ app.get('/health', (req, res) => {
 // ─── API Routes ───────────────────────────────────────────
 app.use(healthMonitor);
 app.use(checkMaintenance);
+
+// Redirect YouTube OAuth callback to frontend
+app.get('/youtube-callback', (req, res) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const query = new URLSearchParams(req.query).toString();
+  res.redirect(`${frontendUrl}/youtube-callback?${query}`);
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/telegram/webhook', telegramWebhookRoutes);
