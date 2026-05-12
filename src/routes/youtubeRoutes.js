@@ -1,6 +1,6 @@
 const express = require('express');
 const youtubeController = require('../controllers/youtubeController');
-const { protect } = require('../middleware/authMiddleware');
+const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 
