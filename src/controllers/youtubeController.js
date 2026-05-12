@@ -9,6 +9,7 @@ exports.getAuthUrl = (req, res) => {
   const scope = [
     'https://www.googleapis.com/auth/youtube.upload',
     'https://www.googleapis.com/auth/youtube.readonly',
+    'https://www.googleapis.com/auth/youtube.force-ssl',
     'https://www.googleapis.com/auth/userinfo.profile',
   ].join(' ');
 
