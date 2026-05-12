@@ -153,8 +153,13 @@ class YoutubeProvider {
       });
       return response.data.items || [];
     } catch (error) {
-      logger.error('Error fetching YouTube comments:', error.response?.data || error.message);
-      return [];
+      const errorData = error.response?.data || error.message;
+      logger.error('Error fetching YouTube comments:', errorData);
+      
+      if (error.response?.status === 401) {
+        throw new Error('TOKEN_EXPIRED');
+      }
+      throw error;
     }
   }
 
@@ -180,7 +185,12 @@ class YoutubeProvider {
       );
       return response.data;
     } catch (error) {
-      logger.error('Error replying to YouTube comment:', error.response?.data || error.message);
+      const errorData = error.response?.data || error.message;
+      logger.error('Error replying to YouTube comment:', errorData);
+      
+      if (error.response?.status === 401) {
+        throw new Error('TOKEN_EXPIRED');
+      }
       return null;
     }
   }

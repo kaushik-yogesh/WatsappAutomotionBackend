@@ -49,8 +49,21 @@ class YoutubeAutomationService {
       await provider.refreshYouTubeToken(user._id);
     }
 
-    // Fetch latest comments
-    const threads = await provider.fetchLatestComments(20);
+    // Fetch latest comments with retry on 401
+    let threads;
+    try {
+      threads = await provider.fetchLatestComments(20);
+    } catch (err) {
+      if (err.message === 'TOKEN_EXPIRED') {
+        logger.info(`[YouTube Automation] Token expired for ${user.email}, refreshing and retrying...`);
+        const refreshed = await provider.refreshYouTubeToken(user._id);
+        provider.accessToken = refreshed.accessToken;
+        threads = await provider.fetchLatestComments(20);
+      } else {
+        throw err;
+      }
+    }
+
     if (!threads || threads.length === 0) return;
 
     for (const thread of threads) {
@@ -131,7 +144,19 @@ class YoutubeAutomationService {
     }
 
     const replyText = customReply || pending.aiSuggestedReply;
-    const success = await provider.replyToCommentThread(commentId, replyText);
+    let success;
+    try {
+      success = await provider.replyToCommentThread(commentId, replyText);
+    } catch (err) {
+      if (err.message === 'TOKEN_EXPIRED') {
+        logger.info(`[YouTube Automation] Token expired during manual approval for ${user.email}, refreshing and retrying...`);
+        const refreshed = await provider.refreshYouTubeToken(user._id);
+        provider.accessToken = refreshed.accessToken;
+        success = await provider.replyToCommentThread(commentId, replyText);
+      } else {
+        throw err;
+      }
+    }
 
     if (success) {
       automation.repliedCommentIds.push(commentId);
