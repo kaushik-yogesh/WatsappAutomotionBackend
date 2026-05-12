@@ -146,7 +146,7 @@ const ensurePublicMediaUrls = async (urls) => {
 // ─── Publish Content ──────────────────────────────────────────────────────
 exports.publishContent = async (req, res, next) => {
   try {
-    let { type, caption, mediaUrls, platforms, hashtags = [], ctaText = '', link = '', mode = 'instant', scheduledAt } = req.body;
+    let { type, caption, mediaUrls, platforms, hashtags = [], ctaText = '', link = '', mode = 'instant', scheduledAt, platformOptions = {} } = req.body;
     type = normalizePostType(type);
 
     logger.info(`Publishing request: Type=${type}, Caption=${caption?.substring(0, 20)}..., MediaCount=${mediaUrls?.length}, PlatformCount=${platforms?.length}`);
@@ -180,6 +180,7 @@ exports.publishContent = async (req, res, next) => {
       ctaText,
       link,
       type,
+      platformOptions,
     };
     const compatibility = await SocialPostOrchestratorService.validateCompatibility({
       ...masterContent,
@@ -595,7 +596,7 @@ exports.generateImage = async (req, res, next) => {
 exports.updateScheduledJob = async (req, res, next) => {
   try {
     const { jobId } = req.params;
-    const { caption, mediaUrls, mode, scheduledAt, platforms } = req.body;
+    const { caption, mediaUrls, mode, scheduledAt, platforms, platformOptions = {} } = req.body;
 
     const job = await SocialPostJob.findOne({ _id: jobId, user: req.user._id });
     if (!job) return next(new AppError('Scheduled post not found', 404));
@@ -621,6 +622,10 @@ exports.updateScheduledJob = async (req, res, next) => {
           mediaUrls: mediaUrls || job.masterContent.mediaUrls
         })
       }));
+    }
+
+    if (platformOptions) {
+      job.masterContent.platformOptions = platformOptions;
     }
 
     await job.save();

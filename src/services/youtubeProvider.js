@@ -83,41 +83,65 @@ class YoutubeProvider {
    */
   async validateShortEligibility(mediaUrl) {
     try {
-      // Basic validation: must be a video
       const isVid = /\.(mp4|mov|avi|wmv|m4v|webm)(?:\?|$|#)/i.test(mediaUrl) || mediaUrl.toLowerCase().includes('/video');
       if (!isVid) {
         return { valid: false, error: 'File must be a video format.' };
       }
 
-      // Metadata check via HEAD request
       const headRes = await axios.head(mediaUrl);
       const contentLength = headRes.headers['content-length'];
-      if (contentLength && parseInt(contentLength) > 100 * 1024 * 1024) { // 100MB limit
+      if (contentLength && parseInt(contentLength) > 100 * 1024 * 1024) {
         return { valid: false, error: 'Video file size exceeds 100MB limit.' };
       }
 
-      // Note: Full duration/ratio check usually requires a library like fluent-ffmpeg 
-      // or client-side validation. We'll assume the orchestrator handles basic ratio/duration warnings.
       return { valid: true };
     } catch (error) {
       logger.warn('Short eligibility validation failed:', error.message);
-      return { valid: true }; // Fallback to true if check fails
+      return { valid: true };
+    }
+  }
+
+  /**
+   * Adds a comment to a video
+   */
+  async addComment(videoId, commentText) {
+    try {
+      logger.info(`Adding comment to video ${videoId}`);
+      const response = await axios.post(
+        'https://www.googleapis.com/youtube/v3/commentThreads?part=snippet',
+        {
+          snippet: {
+            videoId: videoId,
+            topLevelComment: {
+              snippet: {
+                textOriginal: commentText,
+              },
+            },
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      return response.data;
+    } catch (error) {
+      logger.error('Error adding YouTube comment:', error.response?.data || error.message);
+      return null;
     }
   }
 
   /**
    * Uploads a video as a YouTube Short
    */
-  async uploadShort(videoUrl, title, description = '') {
+  async uploadShort(videoUrl, title, description = '', firstComment = '') {
     try {
       logger.info(`Starting YouTube Short upload: ${title}`);
 
-      // 1. Download video from URL (YouTube API requires the file or a stream)
       const videoRes = await axios.get(videoUrl, { responseType: 'stream' });
 
-      // 2. Initializing Resumable Upload
-      // YouTube Shorts are just videos with #Shorts in description or title, and vertical aspect ratio.
-      // We'll add #Shorts to the description to ensure it's categorized correctly.
       const metaDescription = `${description}\n\n#Shorts`.trim();
 
       const initiateRes = await axios.post(
@@ -126,7 +150,7 @@ class YoutubeProvider {
           snippet: {
             title: title.substring(0, 100),
             description: metaDescription,
-            categoryId: '22', // People & Blogs
+            categoryId: '22',
           },
           status: {
             privacyStatus: 'public',
@@ -144,7 +168,6 @@ class YoutubeProvider {
 
       const uploadUrl = initiateRes.headers.location;
 
-      // 3. Uploading the actual file
       const uploadRes = await axios.put(uploadUrl, videoRes.data, {
         headers: {
           Authorization: `Bearer ${this.accessToken}`,
@@ -154,11 +177,17 @@ class YoutubeProvider {
         maxBodyLength: Infinity,
       });
 
-      logger.info('YouTube Short uploaded successfully:', uploadRes.data.id);
+      const videoId = uploadRes.data.id;
+      logger.info('YouTube Short uploaded successfully:', videoId);
+
+      // Add first comment if provided
+      if (firstComment) {
+        await this.addComment(videoId, firstComment);
+      }
 
       return {
-        id: uploadRes.data.id,
-        url: `https://youtube.com/shorts/${uploadRes.data.id}`,
+        id: videoId,
+        url: `https://youtube.com/shorts/${videoId}`,
         status: 'processing',
       };
     } catch (error) {
@@ -193,7 +222,6 @@ class YoutubeProvider {
       const { access_token, refresh_token, expires_in } = response.data;
       const expiry = new Date(Date.now() + expires_in * 1000);
 
-      // Fetch channel details to get channelId and Name
       const provider = new YoutubeProvider(access_token);
       const channel = await provider.fetchChannelDetails();
 

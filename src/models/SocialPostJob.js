@@ -38,6 +38,7 @@ const socialPostJobSchema = new mongoose.Schema({
     hashtags: { type: [String], default: [] },
     ctaText: { type: String, default: '' },
     link: { type: String, default: '' },
+    platformOptions: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
   },
   mode: { type: String, enum: ['instant', 'scheduled'], default: 'instant' },
   scheduledAt: Date,

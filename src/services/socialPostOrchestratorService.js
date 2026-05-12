@@ -627,13 +627,17 @@ class SocialPostOrchestratorService {
               }
             }
 
+            const youtubeOpts = jobDoc.masterContent.platformOptions?.get('youtube') || {};
+            const ytTitle = youtubeOpts.title || jobDoc.masterContent.text || 'My Short';
+            const ytDesc = youtubeOpts.description || jobDoc.masterContent.text;
+            const ytComment = youtubeOpts.firstComment || '';
+
             try {
-              result = await youtube.uploadShort(mediaUrls[0], jobDoc.masterContent.text || 'My Short', jobDoc.masterContent.text);
+              result = await youtube.uploadShort(mediaUrls[0], ytTitle, ytDesc, ytComment);
             } catch (uploadErr) {
               if (uploadErr.message === 'OAUTH_EXPIRED') {
-                // Try one more refresh if first failed or not triggered
                 const refreshed = await youtube.refreshYouTubeToken(jobDoc.user);
-                result = await youtube.uploadShort(mediaUrls[0], jobDoc.masterContent.text || 'My Short', jobDoc.masterContent.text);
+                result = await youtube.uploadShort(mediaUrls[0], ytTitle, ytDesc, ytComment);
               } else {
                 throw uploadErr;
               }
