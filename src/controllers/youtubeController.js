@@ -25,16 +25,19 @@ exports.callback = async (req, res, next) => {
 
     const youtubeData = await YoutubeProvider.connectYouTube(code);
 
-    await User.findByIdAndUpdate(req.user._id, {
-      youtube: {
-        connected: true,
-        channelId: youtubeData.channelId,
-        channelName: youtubeData.channelName,
-        accessToken: youtubeData.accessToken,
-        refreshToken: youtubeData.refreshToken,
-        tokenExpiry: youtubeData.tokenExpiry,
-      },
-    });
+    const updateData = {
+      'youtube.connected': true,
+      'youtube.channelId': youtubeData.channelId,
+      'youtube.channelName': youtubeData.channelName,
+      'youtube.accessToken': youtubeData.accessToken,
+      'youtube.tokenExpiry': youtubeData.tokenExpiry,
+    };
+
+    if (youtubeData.refreshToken) {
+      updateData['youtube.refreshToken'] = youtubeData.refreshToken;
+    }
+
+    await User.findByIdAndUpdate(req.user._id, { $set: updateData });
 
     res.status(200).json({
       status: 'success',
