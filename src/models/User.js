@@ -54,6 +54,17 @@ const userSchema = new mongoose.Schema({
   },
 
   isActive: { type: Boolean, default: true },
+  
+  // Social Platforms
+  youtube: {
+    connected: { type: Boolean, default: false },
+    channelId: String,
+    channelName: String,
+    accessToken: { type: String, select: false },
+    refreshToken: { type: String, select: false },
+    tokenExpiry: Date
+  },
+
   lastLogin: Date,
   loginAttempts: { type: Number, default: 0 },
   lockUntil: Date,

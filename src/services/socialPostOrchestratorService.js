@@ -5,7 +5,9 @@ const FacebookAccount = require('../models/FacebookAccount');
 const InstagramService = require('./instagramService');
 const FacebookService = require('./facebookService');
 const TelegramService = require('./telegramService');
+const YoutubeProvider = require('./youtubeProvider');
 const CloudinaryService = require('./cloudinaryService');
+const User = require('../models/User');
 const crypto = require('crypto');
 const logger = require('../utils/logger');
 const { emitToUser } = require('../utils/socket');
@@ -210,6 +212,19 @@ class SocialPostOrchestratorService {
       if (detectedType.startsWith('carousel_')) {
         result.transformedType = 'post';
       }
+    } else if (platform === 'youtube') {
+      // YouTube only supports Shorts (mapped from Reels)
+      if (detectedType === 'reel') {
+        result.transformedType = 'short';
+        const hasVideo = mediaUrls.some(url => /\.(mp4|mov|avi|wmv|m4v|webm|flv|3gp|mkv)(?:\?|$|#)/i.test(url) || url.toLowerCase().includes('/video/') || url.toLowerCase().includes('resource_type=video') || url.toLowerCase().includes('/video'));
+        if (!hasVideo) {
+          result.supported = false;
+          result.warnings.push('YouTube Shorts require a valid video.');
+        }
+      } else {
+        result.supported = false;
+        result.warnings.push('YouTube only supports Shorts (Reel) on this platform. Post, Carousel, and Story are disabled.');
+      }
     }
 
     return result;
@@ -287,6 +302,26 @@ class SocialPostOrchestratorService {
           status: acc.status === 'error' || acc.status === 'disconnected' ? 'error' : 'connected',
           defaultChatId: acc.defaultChatId || '',
           reconnectPath: '/telegram',
+        });
+      }
+
+      if (p.platform === 'youtube') {
+        const user = await User.findById(userId).select('+youtube.accessToken +youtube.refreshToken');
+        if (!user || !user.youtube || !user.youtube.connected) {
+          logger.warn(`YouTube account not connected for user ${userId}`);
+          continue;
+        }
+
+        configs.push({
+          id: 'youtube_main',
+          modelId: userId,
+          platform: 'youtube',
+          name: user.youtube.channelName || 'YouTube Channel',
+          accessToken: user.youtube.accessToken,
+          refreshToken: user.youtube.refreshToken,
+          expiry: user.youtube.tokenExpiry,
+          status: user.youtube.connected ? 'connected' : 'disconnected',
+          reconnectPath: '/social-publishing?tab=accounts',
         });
       }
     }
@@ -579,6 +614,30 @@ class SocialPostOrchestratorService {
             } else {
               result = await tg.sendTextMessage(chatId, exec.formattedContent.text);
             }
+          } else if (exec.platform === 'youtube') {
+            const youtube = new YoutubeProvider(config.accessToken, config.refreshToken, config.expiry);
+            
+            // Check if token is expired
+            if (config.expiry && new Date(config.expiry) <= new Date()) {
+              try {
+                const refreshed = await youtube.refreshYouTubeToken(jobDoc.user);
+                youtube.accessToken = refreshed.accessToken;
+              } catch (refreshErr) {
+                throw new Error('OAUTH_EXPIRED');
+              }
+            }
+
+            try {
+              result = await youtube.uploadShort(mediaUrls[0], jobDoc.masterContent.text || 'My Short', jobDoc.masterContent.text);
+            } catch (uploadErr) {
+              if (uploadErr.message === 'OAUTH_EXPIRED') {
+                // Try one more refresh if first failed or not triggered
+                const refreshed = await youtube.refreshYouTubeToken(jobDoc.user);
+                result = await youtube.uploadShort(mediaUrls[0], jobDoc.masterContent.text || 'My Short', jobDoc.masterContent.text);
+              } else {
+                throw uploadErr;
+              }
+            }
           }
 
           exec.status = 'success';
@@ -746,6 +805,19 @@ class SocialPostOrchestratorService {
       platformWiseSuccessRate,
       mostUsedPlatform,
     };
+  }
+
+  static async processYouTubeQueue() {
+    logger.info('Processing YouTube automation queue...');
+    const pendingJobs = await SocialPostJob.find({
+      overallStatus: 'queued',
+      scheduledAt: { $lte: new Date() },
+      selectedPlatforms: 'youtube'
+    });
+
+    for (const job of pendingJobs) {
+      await this.runJob(job);
+    }
   }
 }
 

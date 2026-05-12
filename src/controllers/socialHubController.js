@@ -103,6 +103,22 @@ exports.getConnectedAccounts = async (req, res, next) => {
       });
     });
 
+    const User = require('../models/User');
+    const user = await User.findById(userId).select('+youtube.accessToken');
+    if (user && user.youtube && user.youtube.connected) {
+      accounts.push({
+        id: 'youtube_main',
+        platform: 'youtube',
+        name: user.youtube.channelName || 'YouTube Channel',
+        type: 'YouTube Channel',
+        status: 'connected',
+        modelId: userId,
+        tokenValidity: 'valid',
+        reconnectPath: '/social-publishing?tab=accounts',
+        errorMessage: '',
+      });
+    }
+
     res.status(200).json({
       status: 'success',
       data: accounts
