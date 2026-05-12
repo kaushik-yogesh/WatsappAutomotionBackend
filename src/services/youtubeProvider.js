@@ -4,10 +4,11 @@ const User = require('../models/User');
 const AppError = require('../utils/AppError');
 
 class YoutubeProvider {
-  constructor(accessToken, refreshToken = null, expiry = null) {
+  constructor(accessToken, refreshToken = null, expiry = null, channelId = null) {
     this.accessToken = accessToken;
     this.refreshToken = refreshToken;
     this.expiry = expiry;
+    this.channelId = channelId;
     this.clientId = process.env.GOOGLE_CLIENT_ID;
     this.clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     this.redirectUri = process.env.GOOGLE_REDIRECT_URI;
@@ -130,6 +131,56 @@ class YoutubeProvider {
       return response.data;
     } catch (error) {
       logger.error('Error adding YouTube comment:', error.response?.data || error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Fetches latest comment threads for the authenticated channel
+   */
+  async fetchLatestComments(limit = 20) {
+    try {
+      const response = await axios.get('https://www.googleapis.com/youtube/v3/commentThreads', {
+        params: {
+          part: 'snippet',
+          allThreadsRelatedToChannelId: this.channelId, // We might need to store channelId in the instance
+          maxResults: limit,
+          order: 'time',
+        },
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+        },
+      });
+      return response.data.items || [];
+    } catch (error) {
+      logger.error('Error fetching YouTube comments:', error.response?.data || error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Replies to an existing comment thread
+   */
+  async replyToCommentThread(threadId, replyText) {
+    try {
+      const response = await axios.post(
+        'https://www.googleapis.com/youtube/v3/comments?part=snippet',
+        {
+          snippet: {
+            parentId: threadId,
+            textOriginal: replyText,
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      return response.data;
+    } catch (error) {
+      logger.error('Error replying to YouTube comment:', error.response?.data || error.message);
       return null;
     }
   }

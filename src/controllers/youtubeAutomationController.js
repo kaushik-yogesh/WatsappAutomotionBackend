@@ -1,0 +1,66 @@
+const YoutubeAutomation = require('../models/YoutubeAutomation');
+const YoutubeAutomationService = require('../services/youtubeAutomationService');
+const AppError = require('../utils/AppError');
+
+exports.getSettings = async (req, res, next) => {
+  try {
+    let settings = await YoutubeAutomation.findOne({ user: req.user._id });
+    if (!settings) {
+      settings = await YoutubeAutomation.create({ user: req.user._id });
+    }
+    res.status(200).json({ status: 'success', data: settings });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.updateSettings = async (req, res, next) => {
+  try {
+    const { enabled, automationMode, aiPrompt } = req.body;
+    const settings = await YoutubeAutomation.findOneAndUpdate(
+      { user: req.user._id },
+      { enabled, automationMode, aiPrompt },
+      { new: true, upsert: true }
+    );
+    res.status(200).json({ status: 'success', data: settings });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getPendingComments = async (req, res, next) => {
+  try {
+    const settings = await YoutubeAutomation.findOne({ user: req.user._id });
+    const pending = settings ? settings.pendingComments.filter(c => c.status === 'pending') : [];
+    res.status(200).json({ status: 'success', data: pending });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.approveReply = async (req, res, next) => {
+  try {
+    const { commentId, customReply } = req.body;
+    await YoutubeAutomationService.approveReply(req.user._id, commentId, customReply);
+    res.status(200).json({ status: 'success', message: 'Reply posted successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.ignoreComment = async (req, res, next) => {
+  try {
+    const { commentId } = req.body;
+    const settings = await YoutubeAutomation.findOne({ user: req.user._id });
+    if (settings) {
+      const comment = settings.pendingComments.find(c => c.commentId === commentId);
+      if (comment) {
+        comment.status = 'ignored';
+        await settings.save();
+      }
+    }
+    res.status(200).json({ status: 'success', message: 'Comment ignored' });
+  } catch (err) {
+    next(err);
+  }
+};

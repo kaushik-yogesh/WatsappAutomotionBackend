@@ -71,7 +71,18 @@ const startSocialPostScheduler = () => {
     }
   });
 
+  // 3. YouTube Automation: Process comment auto-replies every 5 minutes
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const YoutubeAutomationService = require('./youtubeAutomationService');
+      await YoutubeAutomationService.runAutomation();
+    } catch (err) {
+      logger.error(`[YouTube Automation] Scheduler error: ${err.message}`);
+    }
+  });
+
   logger.info('Reliable Social Post Scheduler initialized (30s tick).');
+  logger.info('YouTube Comment Automation initialized (5m tick).');
 };
 
 module.exports = { startSocialPostScheduler };

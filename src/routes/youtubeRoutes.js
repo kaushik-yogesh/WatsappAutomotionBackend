@@ -10,4 +10,12 @@ router.get('/auth-url', youtubeController.getAuthUrl);
 router.post('/callback', youtubeController.callback);
 router.post('/disconnect', youtubeController.disconnect);
 
+// Automation Routes
+const automationController = require('../controllers/youtubeAutomationController');
+router.get('/automation/settings', automationController.getSettings);
+router.patch('/automation/settings', automationController.updateSettings);
+router.get('/automation/pending', automationController.getPendingComments);
+router.post('/automation/approve', automationController.approveReply);
+router.post('/automation/ignore', automationController.ignoreComment);
+
 module.exports = router;
