@@ -12,13 +12,22 @@ class YoutubeAutomationService {
     try {
       logger.info('[YouTube Automation] Starting comment check cycle...');
       
-      const automations = await YoutubeAutomation.find({ enabled: true }).populate('user');
+      const automations = await YoutubeAutomation.find({ enabled: true }).populate({
+        path: 'user',
+        select: '+youtube.accessToken +youtube.refreshToken'
+      });
       
       for (const automation of automations) {
         try {
           await this.processUserAutomation(automation);
         } catch (err) {
           logger.error(`[YouTube Automation] Error processing user ${automation.user?.email}:`, err.message);
+          
+          // Handle specific OAuth errors by disconnecting if necessary
+          if (err.response?.data?.error === 'invalid_grant' || err.message === 'TOKEN_EXPIRED') {
+             logger.warn(`[YouTube Automation] Critical OAuth error for ${automation.user?.email}. Disconnecting YouTube.`);
+             await User.findByIdAndUpdate(automation.user._id, { 'youtube.connected': false });
+          }
         }
       }
       
@@ -59,6 +68,7 @@ class YoutubeAutomationService {
         const refreshed = await provider.refreshYouTubeToken(user._id);
         provider.accessToken = refreshed.accessToken;
         threads = await provider.fetchLatestComments(20);
+        logger.info(`[YouTube Automation] Successfully retried with refreshed token for ${user.email}`);
       } else {
         throw err;
       }
@@ -124,7 +134,10 @@ class YoutubeAutomationService {
    * Manual approval of a pending comment
    */
   static async approveReply(userId, commentId, customReply = null) {
-    const automation = await YoutubeAutomation.findOne({ user: userId }).populate('user');
+    const automation = await YoutubeAutomation.findOne({ user: userId }).populate({
+      path: 'user',
+      select: '+youtube.accessToken +youtube.refreshToken'
+    });
     if (!automation) throw new Error('Automation settings not found');
 
     const pending = automation.pendingComments.find(c => c.commentId === commentId);

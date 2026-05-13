@@ -44,7 +44,8 @@ class YoutubeProvider {
 
       return { accessToken: access_token, expiry: newExpiry };
     } catch (error) {
-      logger.error('Error refreshing YouTube token:', error.response?.data || error.message);
+      const errorData = error.response?.data || error.message;
+      logger.error('Error refreshing YouTube token:', typeof errorData === 'object' ? JSON.stringify(errorData) : errorData);
       throw error;
     }
   }
@@ -151,7 +152,9 @@ class YoutubeProvider {
           Authorization: `Bearer ${this.accessToken}`,
         },
       });
-      return response.data.items || [];
+      const items = response.data.items || [];
+      logger.info(`[YouTube Provider] Successfully fetched ${items.length} comment threads for channel ${this.channelId}`);
+      return items;
     } catch (error) {
       const errorData = error.response?.data || error.message;
       logger.error('Error fetching YouTube comments:', errorData);
