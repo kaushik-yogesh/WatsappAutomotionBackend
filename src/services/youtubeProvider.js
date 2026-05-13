@@ -178,6 +178,27 @@ class YoutubeProvider {
   }
 
   /**
+   * Fetches details for specific videos (titles, etc)
+   */
+  async fetchVideosDetails(videoIds) {
+    try {
+      const response = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+        params: {
+          part: 'snippet',
+          id: videoIds.join(','),
+        },
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+        },
+      });
+      return response.data.items || [];
+    } catch (error) {
+      logger.error('Error fetching YouTube video details:', error.response?.data || error.message);
+      return [];
+    }
+  }
+
+  /**
    * Fetches latest comment threads for the authenticated channel
    */
   async fetchLatestComments(limit = 20) {

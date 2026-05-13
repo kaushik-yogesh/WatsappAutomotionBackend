@@ -76,11 +76,21 @@ class YoutubeAutomationService {
 
     if (!threads || threads.length === 0) return;
 
+    // Fetch video titles for these threads
+    const videoIds = [...new Set(threads.map(t => t.snippet.videoId))];
+    const videoDetails = await provider.fetchVideosDetails(videoIds);
+    const videoTitleMap = videoDetails.reduce((acc, v) => {
+      acc[v.id] = v.snippet.title;
+      return acc;
+    }, {});
+
     for (const thread of threads) {
       const topComment = thread.snippet.topLevelComment;
       const commentId = topComment.id;
       const commentText = topComment.snippet.textOriginal;
       const authorName = topComment.snippet.authorDisplayName;
+      const videoId = thread.snippet.videoId;
+      const videoTitle = videoTitleMap[videoId] || 'YouTube Video';
 
       // Skip if already replied or processed
       if (automation.repliedCommentIds.includes(commentId)) continue;
@@ -110,7 +120,7 @@ class YoutubeAutomationService {
           automation.replyHistory.push({
             commentId,
             videoId: thread.snippet.videoId,
-            videoTitle: 'YouTube Video',
+            videoTitle: videoTitle,
             authorName,
             authorThumbnail: topComment.snippet.authorProfileImageUrl,
             userComment: commentText,
@@ -127,7 +137,7 @@ class YoutubeAutomationService {
           authorThumbnail: topComment.snippet.authorProfileImageUrl,
           text: commentText,
           videoId: thread.snippet.videoId,
-          videoTitle: 'YouTube Video', // API doesn't return title in commentThreads.list, would need another call
+          videoTitle: videoTitle, // API doesn't return title in commentThreads.list, would need another call
           publishedAt: topComment.snippet.publishedAt,
           aiSuggestedReply: replyText,
           status: 'pending'
