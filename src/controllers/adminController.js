@@ -3,10 +3,12 @@ const Conversation = require('../models/Conversation');
 const WhatsappAccount = require('../models/WhatsappAccount');
 const TelegramAccount = require('../models/TelegramAccount');
 const InstagramAccount = require('../models/InstagramAccount');
+const SocialPostJob = require('../models/SocialPostJob');
 const Agent = require('../models/Agent');
 const SystemSetting = require('../models/SystemSetting');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
+const cloudinary = require('cloudinary').v2;
 
 /**
  * Get overall system statistics
@@ -341,6 +343,94 @@ exports.getSystemLogs = async (req, res, next) => {
       data: { logs: uniqueLogs.slice(0, limit) }
     });
   } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get media files not linked to any post or user
+ */
+exports.getOrphanMedia = async (req, res, next) => {
+  try {
+    // 1. Get resources from Cloudinary
+    // Defaulting to social_hub folder as defined in cloudinaryService
+    const cloudResources = await cloudinary.api.resources({
+      type: 'upload',
+      prefix: 'social_hub/',
+      max_results: 500
+    });
+
+    const cloudFiles = cloudResources.resources.map(r => ({
+      publicId: r.public_id,
+      url: r.secure_url,
+      resourceType: r.resource_type,
+      createdAt: r.created_at,
+      bytes: r.bytes,
+      format: r.format
+    }));
+
+    // 2. Get all media URLs from SocialPostJob
+    const jobs = await SocialPostJob.find({}, 'masterContent.mediaUrls executions.formattedContent.mediaUrls');
+    const dbMediaUrls = new Set();
+    jobs.forEach(job => {
+      // Check masterContent
+      if (job.masterContent?.mediaUrls) {
+        job.masterContent.mediaUrls.forEach(url => {
+          if (url) dbMediaUrls.add(url);
+        });
+      }
+      // Check executions
+      if (job.executions) {
+        job.executions.forEach(exec => {
+          if (exec.formattedContent?.mediaUrls) {
+            exec.formattedContent.mediaUrls.forEach(url => {
+              if (url) dbMediaUrls.add(url);
+            });
+          }
+        });
+      }
+    });
+
+    // 3. Find orphans
+    const orphans = cloudFiles.filter(file => {
+      // Check if any URL in DB contains this publicId
+      const isReferenced = Array.from(dbMediaUrls).some(dbUrl => dbUrl && dbUrl.includes(file.publicId));
+      return !isReferenced;
+    });
+
+    res.status(200).json({
+      status: 'success',
+      count: orphans.length,
+      data: { orphans }
+    });
+  } catch (err) {
+    logger.error('Error fetching orphan media:', err);
+    res.status(500).json({
+      status: 'error',
+      message: 'Could not fetch orphan media. Make sure Cloudinary API is configured correctly.'
+    });
+  }
+};
+
+/**
+ * Delete media from Cloudinary
+ */
+exports.deleteMedia = async (req, res, next) => {
+  try {
+    const { publicIds } = req.body;
+    
+    if (!publicIds || !Array.isArray(publicIds) || publicIds.length === 0) {
+      return next(new AppError('Please provide publicIds to delete', 400));
+    }
+
+    const result = await cloudinary.api.delete_resources(publicIds);
+
+    res.status(200).json({
+      status: 'success',
+      data: { result }
+    });
+  } catch (err) {
+    logger.error('Error deleting media:', err);
     next(err);
   }
 };

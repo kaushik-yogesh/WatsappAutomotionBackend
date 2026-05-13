@@ -18,5 +18,7 @@ router.get('/settings', adminController.getSystemSettings);
 router.patch('/settings', adminController.updateSystemSetting);
 
 router.get('/logs', adminController.getSystemLogs);
+router.get('/orphan-media', adminController.getOrphanMedia);
+router.delete('/orphan-media', adminController.deleteMedia);
 
 module.exports = router;
