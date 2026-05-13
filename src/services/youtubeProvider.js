@@ -352,6 +352,7 @@ class YoutubeProvider {
       
       throw new AppError(`Failed to connect YouTube: ${typeof errorData === 'string' ? errorData : JSON.stringify(errorData)}`, 500);
     }
+  }
   /**
    * Deletes a video from YouTube
    */
