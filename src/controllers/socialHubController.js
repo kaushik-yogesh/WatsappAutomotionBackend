@@ -432,6 +432,8 @@ exports.getFeed = async (req, res, next) => {
       .select('+pageAccessToken +pageId');
 
     const [ig, fbNative] = await Promise.all([igAccounts, fbAccounts]);
+    const User = require('../models/User');
+    const user = await User.findById(req.user._id).select('+youtube.accessToken +youtube.refreshToken');
 
     const platformConfigs = [];
     const connectedFbPageIds = new Set();
@@ -466,6 +468,17 @@ exports.getFeed = async (req, res, next) => {
         });
       }
     });
+
+    if (user && user.youtube && user.youtube.connected) {
+      platformConfigs.push({
+        id: 'youtube_main',
+        platform: 'youtube',
+        accessToken: user.youtube.accessToken,
+        refreshToken: user.youtube.refreshToken,
+        expiry: user.youtube.tokenExpiry,
+        channelId: user.youtube.channelId
+      });
+    }
 
     const feed = await SocialMediaHubService.getFeed(platformConfigs);
 
@@ -524,6 +537,19 @@ exports.deletePost = async (req, res, next) => {
         postId,
         accessToken: acc.pageAccessToken,
         pageId: acc.pageId
+      });
+      return res.status(200).json({ status: 'success' });
+    }
+
+    if (platform === 'youtube') {
+      const User = require('../models/User');
+      const user = await User.findById(req.user._id).select('+youtube.accessToken');
+      if (!user || !user.youtube?.connected) return next(new AppError('YouTube account not found', 404));
+      
+      await SocialMediaHubService.deletePost({
+        platform: 'youtube',
+        postId,
+        accessToken: user.youtube.accessToken
       });
       return res.status(200).json({ status: 'success' });
     }

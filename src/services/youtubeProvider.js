@@ -74,6 +74,7 @@ class YoutubeProvider {
         channelId: channel.id,
         channelName: channel.snippet.title,
         thumbnails: channel.snippet.thumbnails,
+        uploadsPlaylistId: channel.contentDetails?.relatedPlaylists?.uploads,
       };
     } catch (error) {
       logger.error('Error fetching YouTube channel details:', error.response?.data || error.message);
@@ -133,6 +134,46 @@ class YoutubeProvider {
     } catch (error) {
       logger.error('Error adding YouTube comment:', error.response?.data || error.message);
       return null;
+    }
+  }
+
+  /**
+   * Fetches latest uploaded videos/shorts for the authenticated channel
+   */
+  async fetchVideos(limit = 20) {
+    try {
+      // 1. Get channel uploads playlist ID if not already known
+      let playlistId = this.uploadsPlaylistId;
+      if (!playlistId) {
+        const details = await this.fetchChannelDetails();
+        playlistId = details.uploadsPlaylistId;
+      }
+
+      if (!playlistId) {
+        throw new Error('Could not find uploads playlist for this channel.');
+      }
+
+      // 2. Fetch items from the uploads playlist
+      const response = await axios.get('https://www.googleapis.com/youtube/v3/playlistItems', {
+        params: {
+          part: 'snippet,contentDetails',
+          playlistId: playlistId,
+          maxResults: limit,
+        },
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+        },
+      });
+
+      return response.data.items || [];
+    } catch (error) {
+      const errorData = error.response?.data || error.message;
+      logger.error('Error fetching YouTube videos:', errorData);
+      
+      if (error.response?.status === 401) {
+        throw new Error('TOKEN_EXPIRED');
+      }
+      throw error;
     }
   }
 
@@ -310,6 +351,29 @@ class YoutubeProvider {
       }
       
       throw new AppError(`Failed to connect YouTube: ${typeof errorData === 'string' ? errorData : JSON.stringify(errorData)}`, 500);
+    }
+  /**
+   * Deletes a video from YouTube
+   */
+  async deleteVideo(videoId) {
+    try {
+      await axios.delete('https://www.googleapis.com/youtube/v3/videos', {
+        params: {
+          id: videoId,
+        },
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+        },
+      });
+      return true;
+    } catch (error) {
+      const errorData = error.response?.data || error.message;
+      logger.error('Error deleting YouTube video:', errorData);
+      
+      if (error.response?.status === 401) {
+        throw new Error('TOKEN_EXPIRED');
+      }
+      throw error;
     }
   }
 }

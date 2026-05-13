@@ -1,5 +1,6 @@
 const InstagramService = require('./instagramService');
 const FacebookService = require('./facebookService');
+const YoutubeProvider = require('./youtubeProvider');
 const logger = require('../utils/logger');
 
 /**
@@ -128,6 +129,20 @@ class SocialMediaHubService {
                 accountId: p.id
               };
             });
+          case 'youtube':
+            const ytProvider = new YoutubeProvider(p.accessToken, p.refreshToken, p.expiry, p.channelId);
+            posts = await ytProvider.fetchVideos();
+            return posts.map(item => ({
+              id: item.contentDetails?.videoId || item.id,
+              caption: item.snippet?.title,
+              description: item.snippet?.description,
+              mediaUrl: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.default?.url,
+              permalink: `https://www.youtube.com/watch?v=${item.contentDetails?.videoId}`,
+              timestamp: item.snippet?.publishedAt,
+              type: 'video',
+              platform: 'youtube',
+              accountId: p.id
+            }));
           default:
             return [];
         }
@@ -154,6 +169,9 @@ class SocialMediaHubService {
         case 'facebook':
           const fbService = new FacebookService(accessToken, pageId);
           return await fbService.deleteMedia(postId);
+        case 'youtube':
+          const ytProvider = new YoutubeProvider(accessToken); // Needs token handling if expired
+          return await ytProvider.deleteVideo(postId);
         default:
           throw new Error(`Deletion not supported for ${platform}`);
       }
