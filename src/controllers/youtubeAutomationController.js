@@ -64,3 +64,13 @@ exports.ignoreComment = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.getHistory = async (req, res, next) => {
+  try {
+    const settings = await YoutubeAutomation.findOne({ user: req.user._id });
+    const history = settings ? settings.replyHistory.sort((a, b) => b.repliedAt - a.repliedAt) : [];
+    res.status(200).json({ status: 'success', data: history });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -107,7 +107,17 @@ class YoutubeAutomationService {
         const success = await provider.replyToCommentThread(commentId, replyText);
         if (success) {
           automation.repliedCommentIds.push(commentId);
-          logger.info(`[YouTube Automation] Auto-replied to ${commentId}`);
+          automation.replyHistory.push({
+            commentId,
+            videoId: thread.snippet.videoId,
+            videoTitle: 'YouTube Video',
+            authorName,
+            authorThumbnail: topComment.snippet.authorProfileImageUrl,
+            userComment: commentText,
+            aiReply: replyText,
+            repliedAt: new Date()
+          });
+          logger.info(`[YouTube Automation] Auto-replied and saved to history: ${commentId}`);
         }
       } else {
         // Manual mode - Save to pending
@@ -174,8 +184,23 @@ class YoutubeAutomationService {
     if (success) {
       automation.repliedCommentIds.push(commentId);
       pending.status = 'replied';
+
+      // Save to history
+      automation.replyHistory.push({
+        commentId,
+        videoId: pending.videoId,
+        videoTitle: pending.videoTitle || 'YouTube Video',
+        authorName: pending.authorName,
+        authorThumbnail: pending.authorThumbnail,
+        userComment: pending.text,
+        aiReply: replyText,
+        repliedAt: new Date()
+      });
+
       // Keep in list or remove? Let's keep and mark as replied for history, but maybe limit list size.
       if (automation.pendingComments.length > 100) automation.pendingComments.shift();
+      if (automation.replyHistory.length > 200) automation.replyHistory.shift(); // Limit history size
+      
       await automation.save();
       return true;
     }

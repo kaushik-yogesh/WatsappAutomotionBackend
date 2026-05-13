@@ -15,6 +15,7 @@ const automationController = require('../controllers/youtubeAutomationController
 router.get('/automation/settings', automationController.getSettings);
 router.patch('/automation/settings', automationController.updateSettings);
 router.get('/automation/pending', automationController.getPendingComments);
+router.get('/automation/history', automationController.getHistory);
 router.post('/automation/approve', automationController.approveReply);
 router.post('/automation/ignore', automationController.ignoreComment);
 

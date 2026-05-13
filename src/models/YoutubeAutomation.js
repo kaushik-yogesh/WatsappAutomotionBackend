@@ -39,6 +39,19 @@ const youtubeAutomationSchema = new mongoose.Schema({
       enum: ['pending', 'replied', 'ignored'],
       default: 'pending'
     }
+  }],
+  replyHistory: [{
+    commentId: String,
+    videoId: String,
+    videoTitle: String,
+    authorName: String,
+    authorThumbnail: String,
+    userComment: String,
+    aiReply: String,
+    repliedAt: {
+      type: Date,
+      default: Date.now
+    }
   }]
 }, { timestamps: true });
 
