@@ -108,3 +108,23 @@ exports.disconnectAccount = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.updateBotSettings = async (req, res, next) => {
+  try {
+    const { messengerBotEnabled, messengerBotPrompt } = req.body;
+    const account = await FacebookAccount.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id },
+      { messengerBotEnabled, messengerBotPrompt },
+      { new: true, runValidators: true }
+    );
+
+    if (!account) return next(new AppError('Account not found', 404));
+
+    res.status(200).json({
+      status: 'success',
+      data: { account },
+    });
+  } catch (err) {
+    next(err);
+  }
+};

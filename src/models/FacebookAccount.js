@@ -28,6 +28,11 @@ const facebookAccountSchema = new mongoose.Schema({
   tokenExpiry: Date,
   lastValidatedAt: Date,
   isActive: { type: Boolean, default: true },
+  messengerBotEnabled: { type: Boolean, default: false },
+  messengerBotPrompt: { 
+    type: String, 
+    default: "You are a helpful assistant. Reply to this Facebook message in a friendly way. Keep it short." 
+  },
 }, { timestamps: true });
 
 facebookAccountSchema.index({ user: 1 });

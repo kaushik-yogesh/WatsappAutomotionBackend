@@ -18,9 +18,13 @@ const agentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'InstagramAccount',
   },
+  facebookAccount: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'FacebookAccount',
+  },
   platform: {
     type: String,
-    enum: ['whatsapp', 'telegram', 'both', 'instagram', 'all'],
+    enum: ['whatsapp', 'telegram', 'both', 'instagram', 'facebook', 'all'],
     default: 'whatsapp',
   },
 
