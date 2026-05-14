@@ -21,4 +21,8 @@ router.get('/logs', adminController.getSystemLogs);
 router.get('/orphan-media', adminController.getOrphanMedia);
 router.delete('/orphan-media', adminController.deleteMedia);
 
+// Deletion Requests
+router.get('/deletion-requests', adminController.getDeletionRequests);
+router.post('/users/:id/cancel-deletion', adminController.cancelDeletionRequest);
+
 module.exports = router;

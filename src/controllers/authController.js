@@ -76,6 +76,10 @@ exports.login = async (req, res, next) => {
     }
 
     await fraudDetectionService.recordSuccessfulLogin(ip, email);
+    
+    // We allow login even if disabled/pending deletion, 
+    // but the frontend will redirect them to a special "Pending Deletion" page.
+    // However, we mark them as disabled in the response.
 
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });
@@ -173,6 +177,154 @@ exports.resetPassword = async (req, res, next) => {
     await user.save();
 
     sendTokens(user, 200, res);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.requestDeletion = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return next(new AppError('User not found.', 404));
+
+    user.isDeletionPending = true;
+    user.isAccountDisabled = true;
+    user.deletionRequestedAt = new Date();
+    await user.save({ validateBeforeSave: false });
+
+    // Optionally send email confirmation here
+    try {
+      const template = {
+        subject: 'Account Deletion Request Received',
+        html: `<p>Hi ${user.name},</p><p>We have received your request to delete your account. Your account has been disabled immediately, and all your data will be permanently deleted after 30 days.</p><p>If this was a mistake, please contact our support team immediately.</p>`
+      };
+      await sendEmail({ to: user.email, ...template });
+    } catch (err) {
+      logger.error('Failed to send deletion request email:', err);
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Deletion request received. Your account has been disabled and will be deleted in 30 days.'
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Step 1: Send 3 separate OTPs for deletion verification
+ */
+exports.sendDeletionOTPs = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    
+    // Generate 3 random 4-digit codes
+    const otp1 = Math.floor(1000 + Math.random() * 9000).toString();
+    const otp2 = Math.floor(1000 + Math.random() * 9000).toString();
+    const otp3 = Math.floor(1000 + Math.random() * 9000).toString();
+
+    user.deletionOTP1 = otp1;
+    user.deletionOTP2 = otp2;
+    user.deletionOTP3 = otp3;
+    user.deletionOTPExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
+    await user.save({ validateBeforeSave: false });
+
+    // Send codes (in one or multiple emails - sending in one for simplicity but labeled as 3 codes)
+    try {
+      const template = {
+        subject: 'Action Required: Account Deletion Verification Codes',
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+            <h2 style="color: #d32f2f;">Account Deletion Security Verification</h2>
+            <p>You have requested to delete your account. To proceed, you must enter the following 3 security codes in order:</p>
+            <div style="display: flex; justify-content: space-between; margin: 30px 0;">
+              <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; text-align: center; flex: 1; margin: 5px;">
+                <small>Code 1</small><br/><b style="font-size: 20px;">${otp1}</b>
+              </div>
+              <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; text-align: center; flex: 1; margin: 5px;">
+                <small>Code 2</small><br/><b style="font-size: 20px;">${otp2}</b>
+              </div>
+              <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; text-align: center; flex: 1; margin: 5px;">
+                <small>Code 3</small><br/><b style="font-size: 20px;">${otp3}</b>
+              </div>
+            </div>
+            <p style="color: #666; font-size: 13px;">These codes will expire in 15 minutes. If you did not request this, please change your password immediately.</p>
+          </div>
+        `
+      };
+      await sendEmail({ to: user.email, ...template });
+    } catch (err) {
+      logger.error('Failed to send deletion OTPs:', err);
+    }
+
+    res.status(200).json({ status: 'success', message: '3 verification codes have been sent to your email.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Step 2: Verify OTPs and Survey, then Process Request
+ */
+exports.confirmDeletionRequest = async (req, res, next) => {
+  try {
+    const { otp1, otp2, otp3, reason, feedback } = req.body;
+    const user = await User.findById(req.user._id);
+
+    if (!user.deletionOTPExpires || user.deletionOTPExpires < Date.now()) {
+      return next(new AppError('Verification codes have expired. Please request new ones.', 400));
+    }
+
+    if (user.deletionOTP1 !== otp1 || user.deletionOTP2 !== otp2 || user.deletionOTP3 !== otp3) {
+      return next(new AppError('One or more verification codes are incorrect.', 400));
+    }
+
+    user.isDeletionPending = true;
+    user.isAccountDisabled = true;
+    user.deletionRequestedAt = new Date();
+    user.deletionReason = reason;
+    user.deletionFeedback = feedback;
+    
+    // Clear OTPs
+    user.deletionOTP1 = undefined;
+    user.deletionOTP2 = undefined;
+    user.deletionOTP3 = undefined;
+    user.deletionOTPExpires = undefined;
+
+    await user.save({ validateBeforeSave: false });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Deletion request processed successfully. Your account is now disabled.'
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Cancel Deletion Request
+ */
+exports.cancelDeletionRequest = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user.isDeletionPending) {
+      return next(new AppError('No pending deletion request found.', 400));
+    }
+
+    user.isDeletionPending = false;
+    user.isAccountDisabled = false;
+    user.deletionRequestedAt = undefined;
+    user.deletionReason = undefined;
+    user.deletionFeedback = undefined;
+    
+    await user.save({ validateBeforeSave: false });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Your deletion request has been cancelled and your account is now active.'
+    });
   } catch (err) {
     next(err);
   }

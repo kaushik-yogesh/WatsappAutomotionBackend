@@ -175,6 +175,7 @@ app.use(errorHandler);
 
 const { initSocket } = require('./utils/socket');
 const { startSocialPostScheduler } = require('./services/socialPostScheduler');
+const { startDeletionScheduler } = require('./services/dataDeletionService');
 
 // ─── Start Server ─────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
@@ -185,6 +186,7 @@ const server = app.listen(PORT, () => {
 // Initialize Socket.io
 initSocket(server);
 startSocialPostScheduler();
+startDeletionScheduler();
 
 process.on('unhandledRejection', (err) => {
   logger.error('UNHANDLED REJECTION! 💥 Shutting down...', err);

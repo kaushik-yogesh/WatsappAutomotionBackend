@@ -55,6 +55,17 @@ const userSchema = new mongoose.Schema({
 
   isActive: { type: Boolean, default: true },
   
+  // Deletion Request
+  isDeletionPending: { type: Boolean, default: false },
+  deletionRequestedAt: Date,
+  isAccountDisabled: { type: Boolean, default: false },
+  deletionReason: String,
+  deletionFeedback: String,
+  deletionOTP1: String,
+  deletionOTP2: String,
+  deletionOTP3: String,
+  deletionOTPExpires: Date,
+  
   // Social Platforms
   youtube: {
     connected: { type: Boolean, default: false },

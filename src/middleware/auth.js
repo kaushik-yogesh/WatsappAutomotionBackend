@@ -30,6 +30,14 @@ const protect = async (req, res, next) => {
       return next(new AppError('Your account has been deactivated. Contact support.', 401));
     }
 
+    if (user.isAccountDisabled) {
+      // Allow access only to cancellation and basic info
+      const allowedRoutes = ['/api/auth/cancel-deletion-request', '/api/auth/me', '/api/auth/logout'];
+      if (!allowedRoutes.includes(req.originalUrl.split('?')[0])) {
+        return next(new AppError('Your account is disabled due to a pending deletion request. Restore your account to continue using the service.', 401));
+      }
+    }
+
     // Legacy lock check removed in favor of Redis-based fraud detection
 
     req.user = user;

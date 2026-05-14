@@ -434,3 +434,54 @@ exports.deleteMedia = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * Get all users who have requested data deletion
+ */
+exports.getDeletionRequests = async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const users = await User.find({ isDeletionPending: true })
+      .sort({ deletionRequestedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .select('-password');
+
+    const total = await User.countDocuments({ isDeletionPending: true });
+
+    res.status(200).json({
+      status: 'success',
+      results: users.length,
+      total,
+      data: { users }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Cancel a deletion request (restore account)
+ */
+exports.cancelDeletionRequest = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return next(new AppError('User not found', 404));
+
+    user.isDeletionPending = false;
+    user.isAccountDisabled = false;
+    user.deletionRequestedAt = undefined;
+    await user.save({ validateBeforeSave: false });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Deletion request cancelled and account restored.',
+      data: { user }
+    });
+  } catch (err) {
+    next(err);
+  }
+};

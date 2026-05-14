@@ -18,5 +18,9 @@ router.use(protect);
 router.get('/me', authController.getMe);
 router.patch('/update-profile', authController.updateProfile);
 router.patch('/change-password', authController.changePassword);
+router.post('/request-deletion', authController.requestDeletion);
+router.post('/send-deletion-otp', authController.sendDeletionOTPs);
+router.post('/confirm-deletion', authController.confirmDeletionRequest);
+router.post('/cancel-deletion-request', authController.cancelDeletionRequest);
 
 module.exports = router;
