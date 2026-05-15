@@ -6,6 +6,11 @@ const whatsappAccountSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  organization: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+  },
   // Meta WhatsApp Business API credentials (encrypted)
   phoneNumberId: {
     type: String,
@@ -44,6 +49,7 @@ const whatsappAccountSchema = new mongoose.Schema({
 });
 
 whatsappAccountSchema.index({ user: 1 });
+whatsappAccountSchema.index({ organization: 1 });
 whatsappAccountSchema.index({ phoneNumberId: 1 }, { unique: true });
 
 module.exports = mongoose.model('WhatsappAccount', whatsappAccountSchema);

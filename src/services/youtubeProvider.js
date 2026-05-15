@@ -1,6 +1,7 @@
 const axios = require('axios');
 const logger = require('../utils/logger');
 const User = require('../models/User');
+const YoutubeAccount = require('../models/YoutubeAccount');
 const AppError = require('../utils/AppError');
 
 class YoutubeProvider {
@@ -15,7 +16,7 @@ class YoutubeProvider {
   }
 
   /**
-   * Refreshes the YouTube access token using the refresh token
+   * Refreshes the YouTube access token using the refresh token (Legacy - for User model)
    */
   async refreshYouTubeToken(userId) {
     try {
@@ -36,7 +37,7 @@ class YoutubeProvider {
       this.accessToken = access_token;
       this.expiry = newExpiry;
 
-      // Update database
+      // Update database (Legacy)
       await User.findByIdAndUpdate(userId, {
         'youtube.accessToken': access_token,
         'youtube.tokenExpiry': newExpiry,
@@ -46,6 +47,41 @@ class YoutubeProvider {
     } catch (error) {
       const errorData = error.response?.data || error.message;
       logger.error('Error refreshing YouTube token:', typeof errorData === 'object' ? JSON.stringify(errorData) : errorData);
+      throw error;
+    }
+  }
+
+  /**
+   * Refreshes the YouTube access token using the refresh token for a YoutubeAccount
+   */
+  async refreshYouTubeTokenForAccount(youtubeAccount) {
+    try {
+      if (!youtubeAccount.refreshToken) {
+        throw new Error('No refresh token available');
+      }
+
+      const response = await axios.post('https://oauth2.googleapis.com/token', {
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        refresh_token: youtubeAccount.refreshToken,
+        grant_type: 'refresh_token',
+      });
+
+      const { access_token, expires_in } = response.data;
+      const newExpiry = new Date(Date.now() + expires_in * 1000);
+
+      this.accessToken = access_token;
+      this.expiry = newExpiry;
+
+      // Update database
+      youtubeAccount.accessToken = access_token;
+      youtubeAccount.tokenExpiry = newExpiry;
+      await youtubeAccount.save();
+
+      return { accessToken: access_token, expiry: newExpiry };
+    } catch (error) {
+      const errorData = error.response?.data || error.message;
+      logger.error('Error refreshing YouTube token for account:', typeof errorData === 'object' ? JSON.stringify(errorData) : errorData);
       throw error;
     }
   }

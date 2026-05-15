@@ -43,6 +43,17 @@ exports.register = async (req, res, next) => {
 
     const user = await User.create({ name, email, password });
 
+    // Create default organization
+    const Organization = require('../models/Organization');
+    const org = await Organization.create({
+      name: `${user.name}'s Workspace`,
+      owner: user._id,
+      members: [{ user: user._id, role: 'admin' }]
+    });
+
+    user.currentOrganization = org._id;
+    await user.save({ validateBeforeSave: false });
+
     // Send verification email
     const verifyToken = user.createEmailVerifyToken();
     await user.save({ validateBeforeSave: false });

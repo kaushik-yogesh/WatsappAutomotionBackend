@@ -235,17 +235,18 @@ class SocialPostOrchestratorService {
     return delays[attemptCount - 1] || 60000;
   }
 
-  static async buildPlatformConfigs(userId, requestedPlatforms = []) {
+  static async buildPlatformConfigs(userId, requestedPlatforms = [], organizationId = null) {
     const configs = [];
-    logger.info(`Building platform configs for user ${userId}. Requested: ${requestedPlatforms.length}`);
+    logger.info(`Building platform configs for user ${userId}, org ${organizationId}. Requested: ${requestedPlatforms.length}`);
 
     for (const p of requestedPlatforms) {
       const pid = String(p.id || '');
-      logger.info(`Processing platform request: ${p.platform}, id: ${pid}`);
-
+      const filter = organizationId ? { _id: null, organization: organizationId } : { user: userId };
+      
       if (p.platform === 'facebook' && pid.startsWith('fb_native_')) {
         const targetModelId = pid.replace('fb_native_', '');
-        const acc = await FacebookAccount.findOne({ _id: targetModelId, user: userId }).select('+pageAccessToken +pageId');
+        const query = organizationId ? { _id: targetModelId, organization: organizationId } : { _id: targetModelId, user: userId };
+        const acc = await FacebookAccount.findOne(query).select('+pageAccessToken +pageId');
 
         if (!acc) {
           logger.warn(`Account not found: platform=${p.platform}, targetModelId=${targetModelId}, user=${userId}`);
@@ -268,7 +269,8 @@ class SocialPostOrchestratorService {
       const targetModelId = p.platform === 'facebook' && pid.startsWith('fb_') ? pid.replace('fb_', '') : pid;
 
       if (p.platform === 'instagram' || p.platform === 'facebook') {
-        const acc = await InstagramAccount.findOne({ _id: targetModelId, user: userId }).select('+pageAccessToken +pageId +igAccountId');
+        const query = organizationId ? { _id: targetModelId, organization: organizationId } : { _id: targetModelId, user: userId };
+        const acc = await InstagramAccount.findOne(query).select('+pageAccessToken +pageId +igAccountId');
 
         if (!acc) {
           logger.warn(`Account not found: platform=${p.platform}, targetModelId=${targetModelId}, user=${userId}`);
@@ -290,7 +292,8 @@ class SocialPostOrchestratorService {
       }
 
       if (p.platform === 'telegram') {
-        const acc = await TelegramAccount.findOne({ _id: targetModelId, user: userId }).select('+botToken');
+        const query = organizationId ? { _id: targetModelId, organization: organizationId } : { _id: targetModelId, user: userId };
+        const acc = await TelegramAccount.findOne(query).select('+botToken');
         if (!acc) continue;
 
         configs.push({
@@ -306,21 +309,24 @@ class SocialPostOrchestratorService {
       }
 
       if (p.platform === 'youtube') {
-        const user = await User.findById(userId).select('+youtube.accessToken +youtube.refreshToken');
-        if (!user || !user.youtube || !user.youtube.connected) {
-          logger.warn(`YouTube account not connected for user ${userId}`);
+        const YoutubeAccount = require('../models/YoutubeAccount');
+        const query = organizationId ? { organization: organizationId, isActive: true } : { user: userId, isActive: true };
+        const ytAccount = await YoutubeAccount.findOne(query).select('+accessToken +refreshToken');
+
+        if (!ytAccount) {
+          logger.warn(`YouTube account not connected for ${organizationId ? 'org ' + organizationId : 'user ' + userId}`);
           continue;
         }
 
         configs.push({
           id: 'youtube_main',
-          modelId: userId,
+          modelId: ytAccount._id,
           platform: 'youtube',
-          name: user.youtube.channelName || 'YouTube Channel',
-          accessToken: user.youtube.accessToken,
-          refreshToken: user.youtube.refreshToken,
-          expiry: user.youtube.tokenExpiry,
-          status: user.youtube.connected ? 'connected' : 'disconnected',
+          name: ytAccount.channelName || 'YouTube Channel',
+          accessToken: ytAccount.accessToken,
+          refreshToken: ytAccount.refreshToken,
+          expiry: ytAccount.tokenExpiry,
+          status: ytAccount.isActive ? 'connected' : 'disconnected',
           reconnectPath: '/social-publishing?tab=accounts',
         });
       }
@@ -431,7 +437,7 @@ class SocialPostOrchestratorService {
     };
   }
 
-  static async createJob({ userId, masterContent, mode = 'instant', scheduledAt, platforms }) {
+  static async createJob({ userId, organizationId, masterContent, mode = 'instant', scheduledAt, platforms }) {
     const normalizedType = normalizeType(masterContent.type || 'post');
     const normalizedContent = {
       ...masterContent,
@@ -479,6 +485,7 @@ class SocialPostOrchestratorService {
 
     return SocialPostJob.create({
       user: userId,
+      organization: organizationId,
       masterContent: {
         ...normalizedContent,
         mediaUrls: transformedMedia
@@ -512,7 +519,8 @@ class SocialPostOrchestratorService {
         id: e.accountId,
         platform: e.platform,
         name: e.accountName,
-      }))
+      })),
+      jobDoc.organization
     );
 
     for (const exec of jobDoc.executions) {
@@ -618,9 +626,10 @@ class SocialPostOrchestratorService {
             const youtube = new YoutubeProvider(config.accessToken, config.refreshToken, config.expiry);
             
             // Check if token is expired
-            if (config.expiry && new Date(config.expiry) <= new Date()) {
               try {
-                const refreshed = await youtube.refreshYouTubeToken(jobDoc.user);
+                const YoutubeAccount = require('../models/YoutubeAccount');
+                const ytAccount = await YoutubeAccount.findById(config.modelId).select('+refreshToken');
+                const refreshed = await youtube.refreshYouTubeTokenForAccount(ytAccount);
                 youtube.accessToken = refreshed.accessToken;
               } catch (refreshErr) {
                 throw new Error('OAUTH_EXPIRED');
@@ -636,7 +645,9 @@ class SocialPostOrchestratorService {
               result = await youtube.uploadShort(mediaUrls[0], ytTitle, ytDesc, ytComment);
             } catch (uploadErr) {
               if (uploadErr.message === 'OAUTH_EXPIRED') {
-                const refreshed = await youtube.refreshYouTubeToken(jobDoc.user);
+                const YoutubeAccount = require('../models/YoutubeAccount');
+                const ytAccount = await YoutubeAccount.findById(config.modelId).select('+refreshToken');
+                const refreshed = await youtube.refreshYouTubeTokenForAccount(ytAccount);
                 result = await youtube.uploadShort(mediaUrls[0], ytTitle, ytDesc, ytComment);
               } else {
                 throw uploadErr;
@@ -723,8 +734,9 @@ class SocialPostOrchestratorService {
     });
   }
 
-  static async retryFailedPlatform({ jobId, userId, platform }) {
-    const job = await SocialPostJob.findOne({ _id: jobId, user: userId });
+  static async retryFailedPlatform({ jobId, userId, platform, organizationId }) {
+    const query = organizationId ? { _id: jobId, organization: organizationId } : { _id: jobId, user: userId };
+    const job = await SocialPostJob.findOne(query);
     if (!job) throw new Error('Publish history item not found.');
 
     const exec = job.executions.find((e) => e.platform === platform && e.status === 'failed');
@@ -779,8 +791,9 @@ class SocialPostOrchestratorService {
     }
   }
 
-  static async analytics(userId) {
-    const jobs = await SocialPostJob.find({ user: userId });
+  static async analytics(userId, organizationId) {
+    const query = organizationId ? { organization: organizationId } : { user: userId };
+    const jobs = await SocialPostJob.find(query);
     const totalPosts = jobs.length;
     const scheduledPosts = jobs.filter((j) => j.mode === 'scheduled').length;
     const failedPosts = jobs.filter((j) => ['failed', 'partially_failed'].includes(j.overallStatus)).length;

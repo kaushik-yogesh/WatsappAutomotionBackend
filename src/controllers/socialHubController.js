@@ -21,10 +21,10 @@ exports.getConnectedAccounts = async (req, res, next) => {
   try {
     const userId = req.user._id;
 
-    const igAccounts = await InstagramAccount.find({ user: userId });
-    const fbAccounts = await FacebookAccount.find({ user: userId });
-    const waAccounts = await WhatsappAccount.find({ user: userId });
-    const tgAccounts = await TelegramAccount.find({ user: userId });
+    const igAccounts = await InstagramAccount.find({ organization: req.organization._id });
+    const fbAccounts = await FacebookAccount.find({ organization: req.organization._id });
+    const waAccounts = await WhatsappAccount.find({ organization: req.organization._id });
+    const tgAccounts = await TelegramAccount.find({ organization: req.organization._id });
 
     const accounts = [];
     const connectedFbPageIds = new Set();
@@ -103,17 +103,17 @@ exports.getConnectedAccounts = async (req, res, next) => {
       });
     });
 
-    const User = require('../models/User');
-    const user = await User.findById(userId).select('+youtube.accessToken');
-    if (user && user.youtube && user.youtube.connected) {
+    const YoutubeAccount = require('../models/YoutubeAccount');
+    const youtubeAccount = await YoutubeAccount.findOne({ organization: req.organization._id, isActive: true });
+    if (youtubeAccount) {
       accounts.push({
         id: 'youtube_main',
         platform: 'youtube',
-        name: user.youtube.channelName || 'YouTube Channel',
+        name: youtubeAccount.channelName || 'YouTube Channel',
         type: 'YouTube Channel',
-        status: 'connected',
-        modelId: userId,
-        tokenValidity: 'valid',
+        status: youtubeAccount.status,
+        modelId: youtubeAccount._id,
+        tokenValidity: youtubeAccount.status === 'error' ? 'expired' : 'valid',
         reconnectPath: '/social-publishing?tab=accounts',
         errorMessage: '',
       });
@@ -158,7 +158,7 @@ exports.publishContent = async (req, res, next) => {
       return next(new AppError('Please select at least one platform', 400));
     }
 
-    const platformConfigs = await SocialPostOrchestratorService.buildPlatformConfigs(req.user._id, platforms);
+    const platformConfigs = await SocialPostOrchestratorService.buildPlatformConfigs(req.user._id, platforms, req.organization._id);
     if (!platformConfigs.length) {
       return next(new AppError('No valid connected accounts found for selected platforms. Please reconnect and try again.', 400));
     }
@@ -206,6 +206,7 @@ exports.publishContent = async (req, res, next) => {
 
     const job = await SocialPostOrchestratorService.createJob({
       userId: req.user._id,
+      organizationId: req.organization._id,
       masterContent,
       mode: isScheduled ? 'scheduled' : 'instant',
       scheduledAt: scheduleDate,
@@ -244,7 +245,7 @@ exports.validatePost = async (req, res, next) => {
 
     const publicMediaUrls = (await ensurePublicMediaUrls(mediaUrls)).filter((u) => typeof u === 'string' && /^https?:\/\//i.test(u));
 
-    const platformConfigs = await SocialPostOrchestratorService.buildPlatformConfigs(req.user._id, platforms);
+    const platformConfigs = await SocialPostOrchestratorService.buildPlatformConfigs(req.user._id, platforms, req.organization._id);
     if (!platformConfigs.length) {
       return next(new AppError('No valid connected accounts found for selected platforms. Please reconnect and try again.', 400));
     }
@@ -291,7 +292,7 @@ exports.formatPreview = async (req, res, next) => {
 
 exports.getPublishingHistory = async (req, res, next) => {
   try {
-    const history = await SocialPostJob.find({ user: req.user._id }).sort({ createdAt: -1 }).limit(50);
+    const history = await SocialPostJob.find({ organization: req.organization._id }).sort({ createdAt: -1 }).limit(50);
     res.status(200).json({ status: 'success', data: history });
   } catch (err) {
     next(err);
@@ -325,7 +326,7 @@ exports.retryFailedPlatform = async (req, res, next) => {
 
 exports.getPublishingAnalytics = async (req, res, next) => {
   try {
-    const metrics = await SocialPostOrchestratorService.analytics(req.user._id);
+    const metrics = await SocialPostOrchestratorService.analytics(req.user._id, req.organization._id);
     res.status(200).json({ status: 'success', data: metrics });
   } catch (err) {
     next(err);
@@ -346,7 +347,7 @@ exports.updateProfile = async (req, res, next) => {
       if (p.platform === 'facebook' && typeof p.id === 'string' && p.id.startsWith('fb_native_')) {
         const targetModelId = p.id.replace('fb_native_', '');
         const FacebookAccount = require('../models/FacebookAccount');
-        const acc = await FacebookAccount.findOne({ _id: targetModelId, user: req.user._id })
+        const acc = await FacebookAccount.findOne({ _id: targetModelId, organization: req.organization._id })
           .select('+pageAccessToken +pageId');
         if (acc) {
           platformConfigs.push({
@@ -365,7 +366,7 @@ exports.updateProfile = async (req, res, next) => {
         : p.id;
 
       if (p.platform === 'instagram' || p.platform === 'facebook') {
-        const acc = await InstagramAccount.findOne({ _id: targetModelId, user: req.user._id })
+        const acc = await InstagramAccount.findOne({ _id: targetModelId, organization: req.organization._id })
           .select('+pageAccessToken +pageId +igAccountId');
 
         if (acc) {
@@ -426,9 +427,9 @@ exports.uploadMedia = async (req, res, next) => {
 // ─── Get Feed ─────────────────────────────────────────────────────────────
 exports.getFeed = async (req, res, next) => {
   try {
-    const igAccounts = await InstagramAccount.find({ user: req.user._id })
+    const igAccounts = await InstagramAccount.find({ organization: req.organization._id })
       .select('+pageAccessToken +pageId +igAccountId');
-    const fbAccounts = require('../models/FacebookAccount').find({ user: req.user._id })
+    const fbAccounts = require('../models/FacebookAccount').find({ organization: req.organization._id })
       .select('+pageAccessToken +pageId');
 
     const [ig, fbNative] = await Promise.all([igAccounts, fbAccounts]);
@@ -469,14 +470,17 @@ exports.getFeed = async (req, res, next) => {
       }
     });
 
-    if (user && user.youtube && user.youtube.connected) {
+    const YoutubeAccount = require('../models/YoutubeAccount');
+    const youtubeAccount = await YoutubeAccount.findOne({ organization: req.organization._id, isActive: true }).select('+accessToken +refreshToken');
+
+    if (youtubeAccount) {
       platformConfigs.push({
         id: 'youtube_main',
         platform: 'youtube',
-        accessToken: user.youtube.accessToken,
-        refreshToken: user.youtube.refreshToken,
-        expiry: user.youtube.tokenExpiry,
-        channelId: user.youtube.channelId
+        accessToken: youtubeAccount.accessToken,
+        refreshToken: youtubeAccount.refreshToken,
+        expiry: youtubeAccount.tokenExpiry,
+        channelId: youtubeAccount.channelId
       });
     }
 
@@ -484,7 +488,7 @@ exports.getFeed = async (req, res, next) => {
 
     // Fetch jobs from database
     const jobs = await SocialPostJob.find({
-      user: req.user._id,
+      organization: req.organization._id,
     }).sort({ createdAt: -1 }).limit(200);
 
     const mappedJobs = jobs.map(job => ({
@@ -517,7 +521,7 @@ exports.deletePost = async (req, res, next) => {
     const { platform, postId, accountId, isJob, jobId } = req.body;
 
     if (isJob || jobId) {
-      const deleted = await SocialPostJob.findOneAndDelete({ _id: jobId || postId, user: req.user._id });
+      const deleted = await SocialPostJob.findOneAndDelete({ _id: jobId || postId, organization: req.organization._id });
       if (!deleted) return next(new AppError('Job not found', 404));
       return res.status(200).json({ status: 'success', message: 'Scheduled post deleted' });
     }
@@ -529,7 +533,7 @@ exports.deletePost = async (req, res, next) => {
     if (platform === 'facebook' && typeof accountId === 'string' && accountId.startsWith('fb_native_')) {
       const targetModelId = accountId.replace('fb_native_', '');
       const FacebookAccount = require('../models/FacebookAccount');
-      const acc = await FacebookAccount.findOne({ _id: targetModelId, user: req.user._id })
+      const acc = await FacebookAccount.findOne({ _id: targetModelId, organization: req.organization._id })
         .select('+pageAccessToken +pageId');
       if (!acc) return next(new AppError('Account not found', 404));
       await SocialMediaHubService.deletePost({
@@ -542,14 +546,14 @@ exports.deletePost = async (req, res, next) => {
     }
 
     if (platform === 'youtube') {
-      const User = require('../models/User');
-      const user = await User.findById(req.user._id).select('+youtube.accessToken');
-      if (!user || !user.youtube?.connected) return next(new AppError('YouTube account not found', 404));
+      const YoutubeAccount = require('../models/YoutubeAccount');
+      const youtubeAccount = await YoutubeAccount.findOne({ organization: req.organization._id, isActive: true }).select('+accessToken');
+      if (!youtubeAccount) return next(new AppError('YouTube account not found', 404));
       
       await SocialMediaHubService.deletePost({
         platform: 'youtube',
         postId,
-        accessToken: user.youtube.accessToken
+        accessToken: youtubeAccount.accessToken
       });
       return res.status(200).json({ status: 'success' });
     }
@@ -558,7 +562,7 @@ exports.deletePost = async (req, res, next) => {
       ? accountId.replace('fb_', '')
       : accountId;
 
-    const acc = await InstagramAccount.findOne({ _id: targetModelId, user: req.user._id })
+    const acc = await InstagramAccount.findOne({ _id: targetModelId, organization: req.organization._id })
       .select('+pageAccessToken +pageId +igAccountId');
 
     if (!acc) return next(new AppError('Account not found', 404));
@@ -624,7 +628,7 @@ exports.updateScheduledJob = async (req, res, next) => {
     const { jobId } = req.params;
     const { caption, mediaUrls, mode, scheduledAt, platforms, platformOptions = {} } = req.body;
 
-    const job = await SocialPostJob.findOne({ _id: jobId, user: req.user._id });
+    const job = await SocialPostJob.findOne({ _id: jobId, organization: req.organization._id });
     if (!job) return next(new AppError('Scheduled post not found', 404));
 
     if (job.overallStatus !== 'queued') {

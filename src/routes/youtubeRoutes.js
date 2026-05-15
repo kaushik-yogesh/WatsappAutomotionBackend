@@ -1,10 +1,13 @@
 const express = require('express');
 const youtubeController = require('../controllers/youtubeController');
 const { protect } = require('../middleware/auth');
+const { injectOrganization, requireOrganization } = require('../middleware/organizationMiddleware');
 
 const router = express.Router();
 
 router.use(protect);
+router.use(injectOrganization);
+router.use(requireOrganization);
 
 router.get('/auth-url', youtubeController.getAuthUrl);
 router.post('/callback', youtubeController.callback);

@@ -5,7 +5,11 @@ const youtubeAutomationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
-    unique: true,
+  },
+  organization: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
   },
   enabled: {
     type: Boolean,
@@ -56,6 +60,7 @@ const youtubeAutomationSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 youtubeAutomationSchema.index({ user: 1 });
+youtubeAutomationSchema.index({ organization: 1 });
 youtubeAutomationSchema.index({ enabled: 1 });
 
 module.exports = mongoose.model('YoutubeAutomation', youtubeAutomationSchema);

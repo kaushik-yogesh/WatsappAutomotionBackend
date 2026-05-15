@@ -6,6 +6,11 @@ const telegramAccountSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  organization: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+  },
   // Telegram Bot Token (encrypted in production, but storing raw for now if encryption utility not fully mapped)
   botToken: {
     type: String,
@@ -37,6 +42,7 @@ const telegramAccountSchema = new mongoose.Schema({
 });
 
 telegramAccountSchema.index({ user: 1 });
+telegramAccountSchema.index({ organization: 1 });
 telegramAccountSchema.index({ botUsername: 1 }, { unique: true });
 
 module.exports = mongoose.model('TelegramAccount', telegramAccountSchema);

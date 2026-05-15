@@ -6,6 +6,11 @@ const instagramAccountSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  organization: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+  },
   igAccountId: {
     type: String,
     required: true,
@@ -39,6 +44,7 @@ const instagramAccountSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 instagramAccountSchema.index({ user: 1 });
+instagramAccountSchema.index({ organization: 1 });
 instagramAccountSchema.index({ igAccountId: 1 }, { unique: true });
 
 module.exports = mongoose.model('InstagramAccount', instagramAccountSchema);

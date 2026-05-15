@@ -31,6 +31,12 @@ const socialPostJobSchema = new mongoose.Schema({
     required: true,
     index: true,
   },
+  organization: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+    index: true,
+  },
   masterContent: {
     type: { type: String, default: 'post' },
     text: { type: String, default: '' },
@@ -59,6 +65,7 @@ const socialPostJobSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 socialPostJobSchema.index({ user: 1, createdAt: -1 });
+socialPostJobSchema.index({ organization: 1, createdAt: -1 });
 socialPostJobSchema.index({ overallStatus: 1, scheduledAt: 1 });
 
 module.exports = mongoose.model('SocialPostJob', socialPostJobSchema);

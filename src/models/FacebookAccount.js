@@ -6,6 +6,11 @@ const facebookAccountSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  organization: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+  },
   pageId: {
     type: String,
     required: true,
@@ -36,6 +41,7 @@ const facebookAccountSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 facebookAccountSchema.index({ user: 1 });
+facebookAccountSchema.index({ organization: 1 });
 facebookAccountSchema.index({ pageId: 1 }, { unique: true });
 
 module.exports = mongoose.model('FacebookAccount', facebookAccountSchema);

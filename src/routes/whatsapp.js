@@ -4,6 +4,7 @@ const waController = require('../controllers/whatsappController');
 const webhookController = require('../controllers/webhookController');
 const embeddedSignupController = require('../controllers/Embeddedsignupcontroller');
 const { protect } = require('../middleware/auth');
+const { injectOrganization, requireOrganization } = require('../middleware/organizationMiddleware');
 const { validate, schemas } = require('../middleware/validation');
 
 // Webhook routes (no auth - called by Meta)
@@ -12,6 +13,8 @@ router.post('/webhook', webhookController.receiveMessage);
 
 // Protected routes
 router.use(protect);
+router.use(injectOrganization);
+router.use(requireOrganization);
 
 // Embedded Signup routes
 router.post('/embedded-signup/callback', embeddedSignupController.embeddedSignupCallback);

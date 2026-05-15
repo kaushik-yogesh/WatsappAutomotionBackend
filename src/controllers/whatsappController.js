@@ -9,10 +9,10 @@ exports.connectAccount = async (req, res, next) => {
   try {
     const { phoneNumberId, wabaId, accessToken, displayPhoneNumber, verifiedName } = req.body;
 
-    // Check if this phoneNumberId already belongs to another user
+    // Check if this phoneNumberId already belongs to another organization
     const existing = await WhatsappAccount.findOne({ phoneNumberId });
-    if (existing && existing.user.toString() !== req.user._id.toString()) {
-      return next(new AppError('This phone number is already connected to another account.', 400));
+    if (existing && existing.organization.toString() !== req.organization._id.toString()) {
+      return next(new AppError('This phone number is already connected to another organization.', 400));
     }
 
     // Check account limit for user plan
@@ -49,6 +49,7 @@ exports.connectAccount = async (req, res, next) => {
       { phoneNumberId },
       {
         user: req.user._id,
+        organization: req.organization._id,
         phoneNumberId,
         wabaId,
         accessToken: encrypt(accessToken),
@@ -82,7 +83,7 @@ exports.connectAccount = async (req, res, next) => {
 // Get all connected accounts for user
 exports.getAccounts = async (req, res, next) => {
   try {
-    const accounts = await WhatsappAccount.find({ user: req.user._id, isActive: true })
+    const accounts = await WhatsappAccount.find({ organization: req.organization._id, isActive: true })
       .select('-accessToken')
       .lean();
     res.status(200).json({ status: 'success', results: accounts.length, data: { accounts } });
@@ -96,7 +97,7 @@ exports.getAccount = async (req, res, next) => {
   try {
     const account = await WhatsappAccount.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
     }).select('-accessToken');
 
     if (!account) return next(new AppError('Account not found.', 404));
@@ -111,7 +112,7 @@ exports.verifyConnection = async (req, res, next) => {
   try {
     const account = await WhatsappAccount.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
     }).select('+accessToken');
 
     if (!account) return next(new AppError('Account not found.', 404));
@@ -141,7 +142,7 @@ exports.verifyConnection = async (req, res, next) => {
 // Disconnect account
 exports.disconnectAccount = async (req, res, next) => {
   try {
-    const account = await WhatsappAccount.findOne({ _id: req.params.id, user: req.user._id });
+    const account = await WhatsappAccount.findOne({ _id: req.params.id, organization: req.organization._id });
     if (!account) return next(new AppError('Account not found.', 404));
 
     account.status = 'disconnected';

@@ -25,6 +25,7 @@ exports.connectAccount = async (req, res, next) => {
       { igAccountId },
       {
         user: req.user._id,
+        organization: req.organization._id,
         igUsername,
         pageId,
         pageAccessToken,
@@ -134,6 +135,7 @@ exports.autoConnect = async (req, res, next) => {
             { igAccountId },
             {
               user: req.user._id,
+              organization: req.organization._id,
               igUsername,
               pageId: page.id,
               pageAccessToken: page.access_token,
@@ -179,7 +181,7 @@ exports.autoConnect = async (req, res, next) => {
 
 exports.getAllAccounts = async (req, res, next) => {
   try {
-    const accounts = await InstagramAccount.find({ user: req.user._id }).sort('-createdAt');
+    const accounts = await InstagramAccount.find({ organization: req.organization._id }).sort('-createdAt');
     res.status(200).json({
       status: 'success',
       data: { accounts },
@@ -193,7 +195,7 @@ exports.disconnectAccount = async (req, res, next) => {
   try {
     const account = await InstagramAccount.findOneAndDelete({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
     });
 
     if (!account) return next(new AppError('Account not found', 404));
@@ -208,7 +210,7 @@ exports.updateBotSettings = async (req, res, next) => {
   try {
     const { commentBotEnabled, commentBotPrompt } = req.body;
     const account = await InstagramAccount.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
+      { _id: req.params.id, organization: req.organization._id },
       { commentBotEnabled, commentBotPrompt },
       { new: true, runValidators: true }
     );

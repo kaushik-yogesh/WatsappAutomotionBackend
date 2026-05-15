@@ -4,9 +4,12 @@ const AppError = require('../utils/AppError');
 
 exports.getSettings = async (req, res, next) => {
   try {
-    let settings = await YoutubeAutomation.findOne({ user: req.user._id });
+    let settings = await YoutubeAutomation.findOne({ organization: req.organization._id });
     if (!settings) {
-      settings = await YoutubeAutomation.create({ user: req.user._id });
+      settings = await YoutubeAutomation.create({
+        user: req.user._id,
+        organization: req.organization._id
+      });
     }
     res.status(200).json({ status: 'success', data: settings });
   } catch (err) {
@@ -18,8 +21,8 @@ exports.updateSettings = async (req, res, next) => {
   try {
     const { enabled, automationMode, aiPrompt } = req.body;
     const settings = await YoutubeAutomation.findOneAndUpdate(
-      { user: req.user._id },
-      { enabled, automationMode, aiPrompt },
+      { organization: req.organization._id },
+      { enabled, automationMode, aiPrompt, user: req.user._id },
       { new: true, upsert: true }
     );
     res.status(200).json({ status: 'success', data: settings });
@@ -30,7 +33,7 @@ exports.updateSettings = async (req, res, next) => {
 
 exports.getPendingComments = async (req, res, next) => {
   try {
-    const settings = await YoutubeAutomation.findOne({ user: req.user._id });
+    const settings = await YoutubeAutomation.findOne({ organization: req.organization._id });
     const pending = settings ? settings.pendingComments.filter(c => c.status === 'pending') : [];
     res.status(200).json({ status: 'success', data: pending });
   } catch (err) {
@@ -41,7 +44,7 @@ exports.getPendingComments = async (req, res, next) => {
 exports.approveReply = async (req, res, next) => {
   try {
     const { commentId, customReply } = req.body;
-    await YoutubeAutomationService.approveReply(req.user._id, commentId, customReply);
+    await YoutubeAutomationService.approveReply(req.user._id, req.organization._id, commentId, customReply);
     res.status(200).json({ status: 'success', message: 'Reply posted successfully' });
   } catch (err) {
     next(err);
@@ -51,7 +54,7 @@ exports.approveReply = async (req, res, next) => {
 exports.ignoreComment = async (req, res, next) => {
   try {
     const { commentId } = req.body;
-    const settings = await YoutubeAutomation.findOne({ user: req.user._id });
+    const settings = await YoutubeAutomation.findOne({ organization: req.organization._id });
     if (settings) {
       const comment = settings.pendingComments.find(c => c.commentId === commentId);
       if (comment) {
@@ -67,7 +70,7 @@ exports.ignoreComment = async (req, res, next) => {
 
 exports.getHistory = async (req, res, next) => {
   try {
-    const settings = await YoutubeAutomation.findOne({ user: req.user._id });
+    const settings = await YoutubeAutomation.findOne({ organization: req.organization._id });
     const history = settings ? settings.replyHistory.sort((a, b) => b.repliedAt - a.repliedAt) : [];
     res.status(200).json({ status: 'success', data: history });
   } catch (err) {

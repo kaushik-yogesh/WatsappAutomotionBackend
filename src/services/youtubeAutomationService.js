@@ -1,5 +1,6 @@
 const YoutubeAutomation = require('../models/YoutubeAutomation');
 const User = require('../models/User');
+const YoutubeAccount = require('../models/YoutubeAccount');
 const YoutubeProvider = require('./youtubeProvider');
 const AIService = require('./aiService');
 const logger = require('../utils/logger');
@@ -12,10 +13,7 @@ class YoutubeAutomationService {
     try {
       logger.info('[YouTube Automation] Starting comment check cycle...');
       
-      const automations = await YoutubeAutomation.find({ enabled: true }).populate({
-        path: 'user',
-        select: '+youtube.accessToken +youtube.refreshToken'
-      });
+      const automations = await YoutubeAutomation.find({ enabled: true });
       
       for (const automation of automations) {
         try {
@@ -41,21 +39,21 @@ class YoutubeAutomationService {
    * Process automation for a single user
    */
   static async processUserAutomation(automation) {
-    const user = automation.user;
-    if (!user || !user.youtube?.connected) return;
+    const youtubeAccount = await YoutubeAccount.findOne({ organization: automation.organization, isActive: true }).select('+accessToken +refreshToken');
+    if (!youtubeAccount) return;
 
     // Initialize provider
     const provider = new YoutubeProvider(
-      user.youtube.accessToken,
-      user.youtube.refreshToken,
-      user.youtube.tokenExpiry,
-      user.youtube.channelId
+      youtubeAccount.accessToken,
+      youtubeAccount.refreshToken,
+      youtubeAccount.tokenExpiry,
+      youtubeAccount.channelId
     );
 
     // Refresh token if needed
-    if (user.youtube.tokenExpiry && new Date(user.youtube.tokenExpiry) <= new Date()) {
-      logger.info(`[YouTube Automation] Refreshing token for ${user.email}`);
-      await provider.refreshYouTubeToken(user._id);
+    if (youtubeAccount.tokenExpiry && new Date(youtubeAccount.tokenExpiry) <= new Date()) {
+      logger.info(`[YouTube Automation] Refreshing token for channel ${youtubeAccount.channelName}`);
+      await provider.refreshYouTubeTokenForAccount(youtubeAccount);
     }
 
     // Fetch latest comments with retry on 401
@@ -64,11 +62,11 @@ class YoutubeAutomationService {
       threads = await provider.fetchLatestComments(20);
     } catch (err) {
       if (err.message === 'TOKEN_EXPIRED') {
-        logger.info(`[YouTube Automation] Token expired for ${user.email}, refreshing and retrying...`);
-        const refreshed = await provider.refreshYouTubeToken(user._id);
+        logger.info(`[YouTube Automation] Token expired for channel ${youtubeAccount.channelName}, refreshing and retrying...`);
+        const refreshed = await provider.refreshYouTubeTokenForAccount(youtubeAccount);
         provider.accessToken = refreshed.accessToken;
         threads = await provider.fetchLatestComments(20);
-        logger.info(`[YouTube Automation] Successfully retried with refreshed token for ${user.email}`);
+        logger.info(`[YouTube Automation] Successfully retried with refreshed token`);
       } else {
         throw err;
       }
@@ -97,7 +95,7 @@ class YoutubeAutomationService {
       if (automation.pendingComments.some(c => c.commentId === commentId)) continue;
 
       // Skip if author is the channel itself
-      if (topComment.snippet.authorChannelId?.value === user.youtube.channelId) continue;
+      if (topComment.snippet.authorChannelId?.value === youtubeAccount.channelId) continue;
 
       logger.info(`[YouTube Automation] New comment from ${authorName}: ${commentText.substring(0, 30)}...`);
 
@@ -153,27 +151,27 @@ class YoutubeAutomationService {
   /**
    * Manual approval of a pending comment
    */
-  static async approveReply(userId, commentId, customReply = null) {
-    const automation = await YoutubeAutomation.findOne({ user: userId }).populate({
-      path: 'user',
-      select: '+youtube.accessToken +youtube.refreshToken'
-    });
+  static async approveReply(userId, organizationId, commentId, customReply = null) {
+    const automation = await YoutubeAutomation.findOne({ organization: organizationId });
     if (!automation) throw new Error('Automation settings not found');
+
+    const youtubeAccount = await YoutubeAccount.findOne({ organization: organizationId, isActive: true }).select('+accessToken +refreshToken');
+    if (!youtubeAccount) throw new Error('YouTube account not connected');
 
     const pending = automation.pendingComments.find(c => c.commentId === commentId);
     if (!pending) throw new Error('Comment not found in pending list');
 
     const user = automation.user;
     const provider = new YoutubeProvider(
-      user.youtube.accessToken,
-      user.youtube.refreshToken,
-      user.youtube.tokenExpiry,
-      user.youtube.channelId
+      youtubeAccount.accessToken,
+      youtubeAccount.refreshToken,
+      youtubeAccount.tokenExpiry,
+      youtubeAccount.channelId
     );
 
     // Refresh token if needed
-    if (new Date(user.youtube.tokenExpiry) <= new Date()) {
-      await provider.refreshYouTubeToken(user._id);
+    if (new Date(youtubeAccount.tokenExpiry) <= new Date()) {
+      await provider.refreshYouTubeTokenForAccount(youtubeAccount);
     }
 
     const replyText = customReply || pending.aiSuggestedReply;
@@ -182,8 +180,8 @@ class YoutubeAutomationService {
       success = await provider.replyToCommentThread(commentId, replyText);
     } catch (err) {
       if (err.message === 'TOKEN_EXPIRED') {
-        logger.info(`[YouTube Automation] Token expired during manual approval for ${user.email}, refreshing and retrying...`);
-        const refreshed = await provider.refreshYouTubeToken(user._id);
+        logger.info(`[YouTube Automation] Token expired during manual approval for channel ${youtubeAccount.channelName}, refreshing and retrying...`);
+        const refreshed = await provider.refreshYouTubeTokenForAccount(youtubeAccount);
         provider.accessToken = refreshed.accessToken;
         success = await provider.replyToCommentThread(commentId, replyText);
       } else {

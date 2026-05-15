@@ -77,6 +77,10 @@ const userSchema = new mongoose.Schema({
   },
 
   lastLogin: Date,
+  currentOrganization: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization'
+  },
   loginAttempts: { type: Number, default: 0 },
   lockUntil: Date,
 }, {

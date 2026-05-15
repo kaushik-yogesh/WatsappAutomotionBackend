@@ -1,10 +1,13 @@
 const express = require('express');
 const { protect } = require('../middleware/auth');
+const { injectOrganization, requireOrganization } = require('../middleware/organizationMiddleware');
 const socialHubController = require('../controllers/socialHubController');
 
 const router = express.Router();
 
 router.use(protect);
+router.use(injectOrganization);
+router.use(requireOrganization);
 
 router.get('/accounts', socialHubController.getConnectedAccounts);
 router.post('/validate', socialHubController.validatePost);

@@ -1,5 +1,6 @@
 const YoutubeProvider = require('../services/youtubeProvider');
 const User = require('../models/User');
+const YoutubeAccount = require('../models/YoutubeAccount');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
 
@@ -25,19 +26,21 @@ exports.callback = async (req, res, next) => {
 
     const youtubeData = await YoutubeProvider.connectYouTube(code);
 
-    const updateData = {
-      'youtube.connected': true,
-      'youtube.channelId': youtubeData.channelId,
-      'youtube.channelName': youtubeData.channelName,
-      'youtube.accessToken': youtubeData.accessToken,
-      'youtube.tokenExpiry': youtubeData.tokenExpiry,
-    };
-
-    if (youtubeData.refreshToken) {
-      updateData['youtube.refreshToken'] = youtubeData.refreshToken;
-    }
-
-    await User.findByIdAndUpdate(req.user._id, { $set: updateData });
+    await YoutubeAccount.findOneAndUpdate(
+      { channelId: youtubeData.channelId, organization: req.organization._id },
+      {
+        user: req.user._id,
+        organization: req.organization._id,
+        channelId: youtubeData.channelId,
+        channelName: youtubeData.channelName,
+        accessToken: youtubeData.accessToken,
+        refreshToken: youtubeData.refreshToken,
+        tokenExpiry: youtubeData.tokenExpiry,
+        status: 'connected',
+        isActive: true
+      },
+      { upsert: true, new: true }
+    );
 
     res.status(200).json({
       status: 'success',
@@ -56,13 +59,15 @@ exports.callback = async (req, res, next) => {
 
 exports.disconnect = async (req, res, next) => {
   try {
-    await User.findByIdAndUpdate(req.user._id, {
-      $set: {
-        'youtube.connected': false,
-        'youtube.accessToken': null,
-        'youtube.refreshToken': null,
-      },
-    });
+    await YoutubeAccount.updateMany(
+      { organization: req.organization._id },
+      {
+        $set: {
+          status: 'disconnected',
+          isActive: false,
+        },
+      }
+    );
 
     res.status(200).json({
       status: 'success',

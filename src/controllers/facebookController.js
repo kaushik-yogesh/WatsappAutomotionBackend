@@ -46,6 +46,7 @@ exports.autoConnect = async (req, res, next) => {
           { pageId: page.id },
           {
             user: req.user._id,
+            organization: req.organization._id,
             pageName: page.name || 'Facebook Page',
             pageAccessToken: page.access_token,
             status: 'connected',
@@ -84,7 +85,7 @@ exports.autoConnect = async (req, res, next) => {
 
 exports.getAllAccounts = async (req, res, next) => {
   try {
-    const accounts = await FacebookAccount.find({ user: req.user._id }).sort('-createdAt');
+    const accounts = await FacebookAccount.find({ organization: req.organization._id }).sort('-createdAt');
     res.status(200).json({
       status: 'success',
       data: { accounts },
@@ -98,7 +99,7 @@ exports.disconnectAccount = async (req, res, next) => {
   try {
     const account = await FacebookAccount.findOneAndDelete({
       _id: req.params.id,
-      user: req.user._id,
+      organization: req.organization._id,
     });
 
     if (!account) return next(new AppError('Account not found', 404));
@@ -113,7 +114,7 @@ exports.updateBotSettings = async (req, res, next) => {
   try {
     const { messengerBotEnabled, messengerBotPrompt } = req.body;
     const account = await FacebookAccount.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
+      { _id: req.params.id, organization: req.organization._id },
       { messengerBotEnabled, messengerBotPrompt },
       { new: true, runValidators: true }
     );
