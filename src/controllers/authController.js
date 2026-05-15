@@ -102,6 +102,102 @@ exports.login = async (req, res, next) => {
   }
 };
 
+/**
+ * SECURE ADMIN REGISTER
+ * Requires MASTER_ADMIN_KEY in request body or environment
+ */
+exports.adminRegister = async (req, res, next) => {
+  try {
+    const { name, email, password, masterKey } = req.body;
+
+    if (masterKey !== process.env.MASTER_ADMIN_KEY) {
+      return next(new AppError('Invalid Master Admin Key. Signup denied.', 403));
+    }
+
+    const existing = await User.findOne({ email });
+    if (existing) return next(new AppError('Email already registered.', 400));
+
+    const user = await User.create({ 
+      name, 
+      email, 
+      password, 
+      role: 'admin',
+      isEmailVerified: true // Auto-verify admin
+    });
+
+    sendTokens(user, 201, res);
+  } catch (err) {
+    logger.error('Admin Register error:', err);
+    next(err);
+  }
+};
+
+/**
+ * SECURE ADMIN LOGIN
+ * Enforces mandatory OTP for every login attempt
+ */
+exports.adminLogin = async (req, res, next) => {
+  try {
+    const { email, password, otpCode, otpToken } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+    const user = await User.findOne({ email }).select('+password +role');
+    if (!user || user.role !== 'admin') {
+      return next(new AppError('Invalid admin credentials.', 401));
+    }
+
+    const isCorrect = await user.correctPassword(password);
+    if (!isCorrect) {
+      return next(new AppError('Invalid admin credentials.', 401));
+    }
+
+    // MANDATORY OTP CHECK FOR ADMINS
+    if (!otpCode || !otpToken) {
+      const { otp, signedToken } = await fraudDetectionService.generateOTP(email, ip);
+      
+      try {
+        const template = {
+          subject: '🔒 Admin Security Code',
+          html: `
+            <div style="font-family: sans-serif; max-width: 500px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px;">
+              <h2 style="color: #1a73e8; text-align: center;">Admin Verification</h2>
+              <p>You are attempting to access the admin portal. Use the following security code to complete your login:</p>
+              <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; margin: 25px 0;">
+                <b style="font-size: 32px; letter-spacing: 5px; color: #202124;">${otp}</b>
+              </div>
+              <p style="color: #5f6368; font-size: 13px;">This code will expire in 5 minutes. If you did not attempt this login, please secure your account immediately.</p>
+            </div>
+          `
+        };
+        await sendEmail({ to: user.email, ...template });
+      } catch (err) {
+        logger.error('Admin OTP Email Error:', err.message);
+      }
+
+      return res.status(200).json({
+        status: 'fail',
+        action: 'require_otp',
+        message: 'Admin security verification required. Code sent to email.',
+        otpToken: signedToken
+      });
+    }
+
+    // Verify OTP
+    const isOtpValid = await fraudDetectionService.verifyOTP(otpToken, otpCode);
+    if (!isOtpValid) {
+      return next(new AppError('Invalid or expired security code.', 401));
+    }
+
+    user.lastLogin = new Date();
+    await user.save({ validateBeforeSave: false });
+
+    sendTokens(user, 200, res);
+  } catch (err) {
+    logger.error('Admin Login error:', err);
+    next(err);
+  }
+};
+
 exports.refreshToken = async (req, res, next) => {
   try {
     const refreshToken = req.cookies.refreshToken;

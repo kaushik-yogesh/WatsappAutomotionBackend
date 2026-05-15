@@ -8,6 +8,8 @@ const { checkFraudRisk, strictAuthLimiter } = require('../middleware/fraudDetect
 
 router.post('/register', strictAuthLimiter, checkFraudRisk, validate(schemas.register), authController.register);
 router.post('/login', strictAuthLimiter, checkFraudRisk, validate(schemas.login), authController.login);
+router.post('/admin/register', authController.adminRegister);
+router.post('/admin/login', authController.adminLogin);
 router.post('/refresh-token', authController.refreshToken);
 router.post('/logout', authController.logout);
 router.get('/verify-email/:token', authController.verifyEmail);
