@@ -31,9 +31,13 @@ class FraudDetectionService {
     const otp = crypto.randomInt(100000, 999999).toString();
     const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
     
-    const key = `otp:${email}:${ip}`;
-    // Store in Redis for 5 minutes (300s)
-    await redisClient.setEx(key, 300, otpHash);
+    try {
+      const key = `otp:${email}:${ip}`;
+      // Store in Redis for 5 minutes (300s)
+      await redisClient.setEx(key, 300, otpHash);
+    } catch (err) {
+      logger.warn(`Redis error in generateOTP: ${err.message}`);
+    }
 
     // Sign a token to return to the user to provide with the OTP
     const signedToken = jwt.sign({ email, ip, purpose: 'otp_verification' }, process.env.JWT_SECRET || 'fallback_secret', { expiresIn: '5m' });
@@ -52,13 +56,24 @@ class FraudDetectionService {
       const { email, ip } = decoded;
       const key = `otp:${email}:${ip}`;
       
-      const storedHash = await redisClient.get(key);
+      let storedHash;
+      try {
+        storedHash = await redisClient.get(key);
+      } catch (redisErr) {
+        logger.warn(`Redis error in verifyOTP: ${redisErr.message}`);
+        return false;
+      }
+
       if (!storedHash) return false; // Expired or doesn't exist
 
       const providedHash = crypto.createHash('sha256').update(providedOtp).digest('hex');
       if (storedHash === providedHash) {
         // One-time use: delete from Redis
-        await redisClient.del(key);
+        try {
+          await redisClient.del(key);
+        } catch (delErr) {
+          logger.warn(`Redis delete error in verifyOTP: ${delErr.message}`);
+        }
         return true;
       }
       return false;
@@ -79,7 +94,13 @@ class FraudDetectionService {
     
     try {
       const cacheKey = `geo:${ip}`;
-      const cached = await redisClient.get(cacheKey);
+      let cached;
+      try {
+        cached = await redisClient.get(cacheKey);
+      } catch (redisErr) {
+        logger.warn(`Redis error in getGeolocation (get): ${redisErr.message}`);
+      }
+
       if (cached) return JSON.parse(cached);
 
       // Call IPinfo (Using unauthenticated endpoint for demonstration, needs IPINFO_TOKEN in prod)
@@ -94,7 +115,11 @@ class FraudDetectionService {
       };
 
       // Cache for 24 hours
-      await redisClient.setEx(cacheKey, 86400, JSON.stringify(data));
+      try {
+        await redisClient.setEx(cacheKey, 86400, JSON.stringify(data));
+      } catch (setErr) {
+        logger.warn(`Redis error in getGeolocation (set): ${setErr.message}`);
+      }
       return data;
     } catch (error) {
       logger.warn(`Failed to fetch IP geolocation for ${ip}: ${error.message}`);
@@ -108,47 +133,71 @@ class FraudDetectionService {
   async checkDeviceHistory(email, deviceId) {
     if (!email || !deviceId) return true; // Assume new if missing
 
-    const key = `device:${email}`;
-    const knownDevices = await redisClient.sMembers(key);
-    
-    if (knownDevices.includes(deviceId)) {
-      return false; // Not a new device
-    }
+    try {
+      const key = `device:${email}`;
+      const knownDevices = await redisClient.sMembers(key);
+      
+      if (knownDevices.includes(deviceId)) {
+        return false; // Not a new device
+      }
 
-    // Add new device to history
-    await redisClient.sAdd(key, deviceId);
-    await redisClient.expire(key, this.DEVICE_HISTORY_WINDOW);
-    return true; // Is a new device
+      // Add new device to history
+      await redisClient.sAdd(key, deviceId);
+      await redisClient.expire(key, this.DEVICE_HISTORY_WINDOW);
+      return true; // Is a new device
+    } catch (err) {
+      logger.warn(`Redis error in checkDeviceHistory: ${err.message}`);
+      return true; // Fail-open
+    }
   }
 
   /**
    * Tracks incoming requests to calculate velocity using Redis.
    */
   async trackVelocity(ip) {
-    const key = `rate:${ip}`;
-    const count = await redisClient.incr(key);
-    if (count === 1) {
-      await redisClient.expire(key, this.VELOCITY_WINDOW);
+    try {
+      const key = `rate:${ip}`;
+      const count = await redisClient.incr(key);
+      if (count === 1) {
+        await redisClient.expire(key, this.VELOCITY_WINDOW);
+      }
+      return count; // Requests per minute
+    } catch (err) {
+      logger.warn(`Redis error in trackVelocity: ${err.message}`);
+      return 0;
     }
-    return count; // Requests per minute
   }
 
   async recordFailedLogin(ip, email) {
-    const key = `failed_login:${ip}:${email}`;
-    const count = await redisClient.incr(key);
-    if (count === 1) {
-      await redisClient.expire(key, this.FAILED_LOGIN_WINDOW);
+    try {
+      const key = `failed_login:${ip}:${email}`;
+      const count = await redisClient.incr(key);
+      if (count === 1) {
+        await redisClient.expire(key, this.FAILED_LOGIN_WINDOW);
+      }
+      return count;
+    } catch (err) {
+      logger.warn(`Redis error in recordFailedLogin: ${err.message}`);
+      return 0;
     }
-    return count;
   }
 
   async recordSuccessfulLogin(ip, email) {
-    await redisClient.del(`failed_login:${ip}:${email}`);
+    try {
+      await redisClient.del(`failed_login:${ip}:${email}`);
+    } catch (err) {
+      logger.warn(`Redis error in recordSuccessfulLogin: ${err.message}`);
+    }
   }
 
   async getFailedLogins(ip, email) {
-    const val = await redisClient.get(`failed_login:${ip}:${email}`);
-    return val ? parseInt(val, 10) : 0;
+    try {
+      const val = await redisClient.get(`failed_login:${ip}:${email}`);
+      return val ? parseInt(val, 10) : 0;
+    } catch (err) {
+      logger.warn(`Redis error in getFailedLogins: ${err.message}`);
+      return 0;
+    }
   }
 
   isDisposableEmail(email) {
@@ -212,14 +261,23 @@ class FraudDetectionService {
     // Impossible Travel check
     if (email && geoData.loc !== '0,0') {
       const lastLocKey = `last_loc:${email}`;
-      const lastLoc = await redisClient.get(lastLocKey);
+      let lastLoc;
+      try {
+        lastLoc = await redisClient.get(lastLocKey);
+      } catch (redisErr) {
+        logger.warn(`Redis error in calculateRiskScore (get loc): ${redisErr.message}`);
+      }
+
       if (lastLoc && lastLoc !== geoData.loc) {
-        // Simplified impossible travel (just checking if lat/lng changed)
-        // A true implementation would calculate distance and time difference
         score += 25;
         reasons.push('Impossible travel / sudden location change');
       }
-      await redisClient.setEx(lastLocKey, 86400 * 7, geoData.loc);
+
+      try {
+        await redisClient.setEx(lastLocKey, 86400 * 7, geoData.loc);
+      } catch (redisErr) {
+        logger.warn(`Redis error in calculateRiskScore (set loc): ${redisErr.message}`);
+      }
     }
 
     // 5. Disposable Email
@@ -236,10 +294,14 @@ class FraudDetectionService {
     }
 
     // Temporary Block Check
-    const isBlocked = await redisClient.get(`block:${ip}`);
-    if (isBlocked) {
-      score = 100;
-      reasons.push('IP is temporarily blocked');
+    try {
+      const isBlocked = await redisClient.get(`block:${ip}`);
+      if (isBlocked) {
+        score = 100;
+        reasons.push('IP is temporarily blocked');
+      }
+    } catch (redisErr) {
+      logger.warn(`Redis error in calculateRiskScore (block check): ${redisErr.message}`);
     }
 
     score = Math.min(score, 100);
@@ -260,8 +322,15 @@ class FraudDetectionService {
     }
 
     // Auto-block IP if critical
-    if (action === 'block' && !isBlocked) {
-      await redisClient.setEx(`block:${ip}`, 3600, 'blocked'); // block for 1 hour
+    if (action === 'block') {
+      try {
+        const isBlocked = await redisClient.get(`block:${ip}`);
+        if (!isBlocked) {
+          await redisClient.setEx(`block:${ip}`, 3600, 'blocked'); // block for 1 hour
+        }
+      } catch (redisErr) {
+        logger.warn(`Redis error in calculateRiskScore (auto-block): ${redisErr.message}`);
+      }
     }
 
     return { score, reasons, action };
