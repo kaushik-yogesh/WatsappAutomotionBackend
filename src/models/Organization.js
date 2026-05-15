@@ -39,7 +39,8 @@ const organizationSchema = new mongoose.Schema({
 // Create slug before saving
 organizationSchema.pre('save', function(next) {
   if (this.isModified('name')) {
-    this.slug = this.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const randomSuffix = Math.random().toString(36).substring(2, 7);
+    this.slug = `${this.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${randomSuffix}`;
   }
   next();
 });
