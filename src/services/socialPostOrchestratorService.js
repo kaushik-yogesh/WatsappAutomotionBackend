@@ -626,14 +626,13 @@ class SocialPostOrchestratorService {
             const youtube = new YoutubeProvider(config.accessToken, config.refreshToken, config.expiry);
             
             // Check if token is expired
-              try {
-                const YoutubeAccount = require('../models/YoutubeAccount');
-                const ytAccount = await YoutubeAccount.findById(config.modelId).select('+refreshToken');
-                const refreshed = await youtube.refreshYouTubeTokenForAccount(ytAccount);
-                youtube.accessToken = refreshed.accessToken;
-              } catch (refreshErr) {
-                throw new Error('OAUTH_EXPIRED');
-              }
+            try {
+              const YoutubeAccount = require('../models/YoutubeAccount');
+              const ytAccount = await YoutubeAccount.findById(config.modelId).select('+refreshToken');
+              const refreshed = await youtube.refreshYouTubeTokenForAccount(ytAccount);
+              youtube.accessToken = refreshed.accessToken;
+            } catch (refreshErr) {
+              throw new Error('OAUTH_EXPIRED');
             }
 
             const youtubeOpts = jobDoc.masterContent.platformOptions?.get('youtube') || {};
