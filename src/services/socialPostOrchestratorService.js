@@ -2,10 +2,12 @@ const SocialPostJob = require('../models/SocialPostJob');
 const InstagramAccount = require('../models/InstagramAccount');
 const TelegramAccount = require('../models/TelegramAccount');
 const FacebookAccount = require('../models/FacebookAccount');
+const LinkedInAccount = require('../models/LinkedInAccount');
 const InstagramService = require('./instagramService');
 const FacebookService = require('./facebookService');
 const TelegramService = require('./telegramService');
 const YoutubeProvider = require('./youtubeProvider');
+const LinkedInService = require('./linkedinService');
 const CloudinaryService = require('./cloudinaryService');
 const User = require('../models/User');
 const crypto = require('crypto');
@@ -225,6 +227,19 @@ class SocialPostOrchestratorService {
         result.supported = false;
         result.warnings.push('YouTube only supports Shorts (Reel) on this platform. Post, Carousel, and Story are disabled.');
       }
+    } else if (platform === 'linkedin') {
+      if (detectedType === 'reel') {
+        result.transformedType = 'post';
+        result.warnings.push('LinkedIn does not have Reels. This will be shared as a standard video post.');
+      }
+      if (detectedType.startsWith('story_')) {
+        result.supported = false;
+        result.warnings.push('LinkedIn Stories are no longer supported by the platform.');
+      }
+      if (detectedType.startsWith('carousel_')) {
+        // LinkedIn carousels are actually Documents. For now, we'll fallback to a link share or first image
+        result.warnings.push('LinkedIn Carousel (Multi-image) will be shared as a single link with the primary image.');
+      }
     }
 
     return result;
@@ -327,6 +342,23 @@ class SocialPostOrchestratorService {
           refreshToken: ytAccount.refreshToken,
           expiry: ytAccount.tokenExpiry,
           status: ytAccount.isActive ? 'connected' : 'disconnected',
+          reconnectPath: '/social-publishing?tab=accounts',
+        });
+      }
+
+      if (p.platform === 'linkedin') {
+        const query = organizationId ? { _id: pid, organization: organizationId } : { _id: pid, user: userId };
+        const acc = await LinkedInAccount.findOne(query);
+        if (!acc) continue;
+
+        configs.push({
+          id: pid,
+          modelId: acc._id,
+          platform: 'linkedin',
+          name: p.name || acc.name,
+          accessToken: acc.accessToken,
+          linkedinId: acc.linkedinId,
+          status: acc.isActive ? 'connected' : 'disconnected',
           reconnectPath: '/social-publishing?tab=accounts',
         });
       }
@@ -652,6 +684,9 @@ class SocialPostOrchestratorService {
                 throw uploadErr;
               }
             }
+          } else if (exec.platform === 'linkedin') {
+            const li = new LinkedInService(config.accessToken, config.linkedinId);
+            result = await li.publishPost({ caption: exec.formattedContent.text, mediaUrls, type: finalType });
           }
 
           exec.status = 'success';
@@ -783,6 +818,13 @@ class SocialPostOrchestratorService {
         await TelegramAccount.findByIdAndUpdate(modelId, {
           status: 'disconnected',
           errorMessage: 'Token expired or invalid. Please reconnect.',
+        });
+      }
+
+      if (platform === 'linkedin') {
+        await LinkedInAccount.findByIdAndUpdate(modelId, {
+          isActive: false,
+          errorMessage: 'LinkedIn token expired. Please reconnect.',
         });
       }
     } catch (err) {

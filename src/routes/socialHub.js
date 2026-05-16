@@ -22,5 +22,7 @@ router.get('/feed', socialHubController.getFeed);
 router.patch('/update-job/:jobId', socialHubController.updateScheduledJob);
 router.post('/delete-post', socialHubController.deletePost);
 router.get('/insights', socialHubController.getInsights);
+router.get('/linkedin/auth-url', socialHubController.getLinkedInAuthUrl);
+router.post('/linkedin/callback', socialHubController.linkedinCallback);
 
 module.exports = router;

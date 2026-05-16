@@ -1,6 +1,7 @@
 const InstagramService = require('./instagramService');
 const FacebookService = require('./facebookService');
 const YoutubeProvider = require('./youtubeProvider');
+const LinkedInService = require('./linkedinService');
 const logger = require('../utils/logger');
 
 /**
@@ -11,10 +12,10 @@ class SocialMediaHubService {
   /**
    * Publish content to multiple platforms
    * @param {Object} params
-   * @param {string} params.type - 'post', 'reel', 'story'
+   * @param {string} params.type - 'post', 'reel', 'story', 'carousel'
    * @param {string} params.caption - Text content
    * @param {string[]} params.mediaUrls - Array of media URLs
-   * @param {Array} params.platforms - Array of platform objects { id, platform, name, accessToken, pageId, igAccountId }
+   * @param {Array} params.platforms - Array of platform objects { id, platform, name, accessToken, pageId, igAccountId, linkedinId }
    */
   static async publishToAll(params) {
     const { type, caption, mediaUrls, platforms } = params;
@@ -31,6 +32,10 @@ class SocialMediaHubService {
           case 'facebook':
             const fbService = new FacebookService(p.accessToken, p.pageId);
             result = await fbService.publishPost(caption, mediaUrls, type);
+            break;
+          case 'linkedin':
+            const liService = new LinkedInService(p.accessToken, p.linkedinId);
+            result = await liService.publishPost({ caption, mediaUrls, type });
             break;
           case 'telegram':
             // Add Telegram posting logic here in the future

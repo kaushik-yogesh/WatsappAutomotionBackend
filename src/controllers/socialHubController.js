@@ -3,6 +3,8 @@ const InstagramAccount = require('../models/InstagramAccount');
 const WhatsappAccount = require('../models/WhatsappAccount');
 const TelegramAccount = require('../models/TelegramAccount');
 const FacebookAccount = require('../models/FacebookAccount');
+const LinkedInAccount = require('../models/LinkedInAccount');
+const LinkedInService = require('../services/linkedinService');
 const SocialMediaHubService = require('../services/socialMediaHubService');
 const SocialPostOrchestratorService = require('../services/socialPostOrchestratorService');
 const SocialPostJob = require('../models/SocialPostJob');
@@ -118,6 +120,26 @@ exports.getConnectedAccounts = async (req, res, next) => {
         errorMessage: '',
       });
     }
+
+      });
+    }
+
+    // LinkedIn
+    const LinkedInAccount = require('../models/LinkedInAccount');
+    const liAccounts = await LinkedInAccount.find({ organization: req.organization._id, isActive: true });
+    liAccounts.forEach(acc => {
+      accounts.push({
+        id: acc._id,
+        platform: 'linkedin',
+        name: acc.name || 'LinkedIn User',
+        type: 'Personal Profile',
+        status: acc.isActive ? 'connected' : 'disconnected',
+        modelId: acc._id,
+        tokenValidity: 'valid',
+        reconnectPath: '/social-publishing?tab=accounts',
+        errorMessage: '',
+      });
+    });
 
     res.status(200).json({
       status: 'success',
@@ -715,5 +737,65 @@ exports.getInsights = async (req, res, next) => {
     }
   } catch (err) {
     next(err);
+  }
+};
+
+// ─── LinkedIn OAuth ────────────────────────────────────────────────────────
+exports.getLinkedInAuthUrl = (req, res) => {
+  const clientId = process.env.LINKEDIN_CLIENT_ID;
+  const redirectUri = process.env.LINKEDIN_REDIRECT_URI;
+  const scope = ['r_liteprofile', 'r_emailaddress', 'w_member_social'].join(' ');
+
+  const url = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
+
+  res.status(200).json({ status: 'success', url });
+};
+
+exports.linkedinCallback = async (req, res, next) => {
+  const axios = require('axios');
+  try {
+    const { code } = req.body;
+    if (!code) return next(new AppError('Code is required', 400));
+
+    // Exchange code for token
+    const tokenResponse = await axios.post('https://www.linkedin.com/oauth/v2/accessToken', null, {
+      params: {
+        grant_type: 'authorization_code',
+        code: code,
+        client_id: process.env.LINKEDIN_CLIENT_ID,
+        client_secret: process.env.LINKEDIN_CLIENT_SECRET,
+        redirect_uri: process.env.LINKEDIN_REDIRECT_URI
+      }
+    });
+
+    const accessToken = tokenResponse.data.access_token;
+    const expiresAt = new Date(Date.now() + tokenResponse.data.expires_in * 1000);
+
+    // Get LinkedIn Profile
+    const profile = await LinkedInService.getProfile(accessToken);
+
+    const account = await LinkedInAccount.findOneAndUpdate(
+      { linkedinId: profile.id, organization: req.organization._id },
+      {
+        user: req.user._id,
+        organization: req.organization._id,
+        linkedinId: profile.id,
+        name: profile.name,
+        profilePicture: profile.profilePicture,
+        accessToken: accessToken,
+        expiresAt: expiresAt,
+        isActive: true
+      },
+      { upsert: true, new: true }
+    );
+
+    res.status(200).json({
+      status: 'success',
+      message: 'LinkedIn account connected successfully',
+      data: account
+    });
+  } catch (err) {
+    logger.error('LinkedIn OAuth callback error:', err);
+    next(new AppError('Failed to connect LinkedIn account: ' + (err.response?.data?.error_description || err.message), 500));
   }
 };
