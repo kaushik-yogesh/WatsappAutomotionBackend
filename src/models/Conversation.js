@@ -33,6 +33,11 @@ const conversationSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  organization: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+  },
   agent: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Agent',
@@ -96,6 +101,7 @@ const conversationSchema = new mongoose.Schema({
 });
 
 conversationSchema.index({ user: 1, status: 1 });
+conversationSchema.index({ organization: 1, status: 1 });
 conversationSchema.index({ user: 1, customerPhone: 1 });
 conversationSchema.index({ agent: 1 });
 conversationSchema.index({ lastMessageAt: -1 });

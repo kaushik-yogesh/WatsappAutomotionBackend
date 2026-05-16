@@ -9,7 +9,10 @@ const { decrypt } = require('../utils/encryption');
 exports.getConversations = async (req, res, next) => {
   try {
     const { status, agentId, platform, page = 1, limit = 20, search } = req.query;
-    const filter = { user: req.user._id };
+    // Filter by org if available, fall back to user for backward compat
+    const filter = req.organization 
+      ? { organization: req.organization._id }
+      : { user: req.user._id };
 
     if (status) filter.status = status;
     if (platform) filter.platform = platform;
@@ -183,6 +186,10 @@ exports.toggleStatus = async (req, res, next) => {
 
 exports.getDashboardStats = async (req, res, next) => {
   try {
+    // Filter by org if available, fall back to user for backward compat
+    const baseFilter = req.organization 
+      ? { organization: req.organization._id }
+      : { user: req.user._id };
     const userId = req.user._id;
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -196,16 +203,16 @@ exports.getDashboardStats = async (req, res, next) => {
       weeklyMessages,
       avgResponseTime,
     ] = await Promise.all([
-      Conversation.countDocuments({ user: userId }),
-      Conversation.countDocuments({ user: userId, status: 'active' }),
-      Conversation.countDocuments({ user: userId, createdAt: { $gte: startOfMonth } }),
-      Conversation.countDocuments({ user: userId, isRead: false }),
+      Conversation.countDocuments(baseFilter),
+      Conversation.countDocuments({ ...baseFilter, status: 'active' }),
+      Conversation.countDocuments({ ...baseFilter, createdAt: { $gte: startOfMonth } }),
+      Conversation.countDocuments({ ...baseFilter, isRead: false }),
       Conversation.aggregate([
-        { $match: { user: userId, createdAt: { $gte: startOfWeek } } },
+        { $match: { ...baseFilter, createdAt: { $gte: startOfWeek } } },
         { $group: { _id: null, total: { $sum: '$totalMessages' } } },
       ]),
       Conversation.aggregate([
-        { $match: { user: userId } },
+        { $match: baseFilter },
         { $unwind: '$messages' },
         { $match: { 'messages.role': 'assistant', 'messages.responseTime': { $exists: true } } },
         { $group: { _id: null, avg: { $avg: '$messages.responseTime' } } },
@@ -214,7 +221,7 @@ exports.getDashboardStats = async (req, res, next) => {
 
     // Daily message count for last 7 days
     const dailyStats = await Conversation.aggregate([
-      { $match: { user: userId, lastMessageAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } },
+      { $match: { ...baseFilter, lastMessageAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } },
       { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$lastMessageAt' } }, count: { $sum: '$totalMessages' } } },
       { $sort: { _id: 1 } },
     ]);

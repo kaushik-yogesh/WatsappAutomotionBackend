@@ -4,8 +4,11 @@ const agentRouter = express.Router();
 const agentController = require('../controllers/agentController');
 const { protect } = require('../middleware/auth');
 const { validate, schemas } = require('../middleware/validation');
+const { injectOrganization, requireOrganization } = require('../middleware/organizationMiddleware');
 
 agentRouter.use(protect);
+agentRouter.use(injectOrganization);
+agentRouter.use(requireOrganization);
 agentRouter.get('/models', agentController.getAvailableModels);
 agentRouter.route('/')
   .get(agentController.getAgents)

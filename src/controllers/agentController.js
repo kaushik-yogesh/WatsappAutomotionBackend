@@ -7,16 +7,16 @@ exports.createAgent = async (req, res, next) => {
   try {
     const { whatsappAccountId, ...agentData } = req.body;
 
-    // Verify WA account belongs to user
+    // Verify WA account belongs to this organization
     const waAccount = await WhatsappAccount.findOne({
       _id: whatsappAccountId,
-      user: req.user._id,
+      organization: req.organization._id,
       status: 'connected',
     });
     if (!waAccount) return next(new AppError('WhatsApp account not found or not connected.', 404));
 
-    // Check agent limit
-    const agentCount = await Agent.countDocuments({ user: req.user._id, isActive: true });
+    // Check agent limit (scoped to organization)
+    const agentCount = await Agent.countDocuments({ organization: req.organization._id, isActive: true });
     const limits = req.user.getPlanLimits();
     if (agentCount >= limits.agents) {
       return next(new AppError(`Your plan allows only ${limits.agents} agent(s). Please upgrade.`, 403));
@@ -25,6 +25,7 @@ exports.createAgent = async (req, res, next) => {
     const agent = await Agent.create({
       ...agentData,
       user: req.user._id,
+      organization: req.organization._id,
       whatsappAccount: whatsappAccountId,
     });
 
@@ -36,7 +37,7 @@ exports.createAgent = async (req, res, next) => {
 
 exports.getAgents = async (req, res, next) => {
   try {
-    const agents = await Agent.find({ user: req.user._id, isActive: true })
+    const agents = await Agent.find({ organization: req.organization._id, isActive: true })
       .populate('whatsappAccount', 'displayPhoneNumber verifiedName status')
       .lean();
     res.status(200).json({ status: 'success', results: agents.length, data: { agents } });
@@ -47,7 +48,7 @@ exports.getAgents = async (req, res, next) => {
 
 exports.getAgent = async (req, res, next) => {
   try {
-    const agent = await Agent.findOne({ _id: req.params.id, user: req.user._id })
+    const agent = await Agent.findOne({ _id: req.params.id, organization: req.organization._id })
       .populate('whatsappAccount', 'displayPhoneNumber verifiedName status');
     if (!agent) return next(new AppError('Agent not found.', 404));
     res.status(200).json({ status: 'success', data: { agent } });
@@ -58,11 +59,11 @@ exports.getAgent = async (req, res, next) => {
 
 exports.updateAgent = async (req, res, next) => {
   try {
-    const forbidden = ['user', 'whatsappAccount', 'stats'];
+    const forbidden = ['user', 'organization', 'whatsappAccount', 'stats'];
     forbidden.forEach((f) => delete req.body[f]);
 
     const agent = await Agent.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
+      { _id: req.params.id, organization: req.organization._id },
       req.body,
       { new: true, runValidators: true }
     );
@@ -76,7 +77,7 @@ exports.updateAgent = async (req, res, next) => {
 exports.deleteAgent = async (req, res, next) => {
   try {
     const agent = await Agent.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
+      { _id: req.params.id, organization: req.organization._id },
       { isActive: false },
       { new: true }
     );
@@ -89,7 +90,7 @@ exports.deleteAgent = async (req, res, next) => {
 
 exports.toggleAgent = async (req, res, next) => {
   try {
-    const agent = await Agent.findOne({ _id: req.params.id, user: req.user._id });
+    const agent = await Agent.findOne({ _id: req.params.id, organization: req.organization._id });
     if (!agent) return next(new AppError('Agent not found.', 404));
     agent.isActive = !agent.isActive;
     await agent.save();
@@ -105,7 +106,7 @@ exports.testAgent = async (req, res, next) => {
     const { message } = req.body;
     if (!message) return next(new AppError('Test message is required.', 400));
 
-    const agent = await Agent.findOne({ _id: req.params.id, user: req.user._id });
+    const agent = await Agent.findOne({ _id: req.params.id, organization: req.organization._id });
     if (!agent) return next(new AppError('Agent not found.', 404));
 
     const result = await AIService.generate(agent, [], message);

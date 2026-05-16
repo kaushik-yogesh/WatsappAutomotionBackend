@@ -6,6 +6,11 @@ const agentSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  organization: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+  },
   whatsappAccount: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'WhatsappAccount',
@@ -119,6 +124,7 @@ const agentSchema = new mongoose.Schema({
 });
 
 agentSchema.index({ user: 1, isActive: 1 });
+agentSchema.index({ organization: 1, isActive: 1 });
 agentSchema.index({ whatsappAccount: 1 });
 
 module.exports = mongoose.model('Agent', agentSchema);
