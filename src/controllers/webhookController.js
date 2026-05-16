@@ -92,6 +92,7 @@ exports.receiveMessage = async (req, res) => {
     if (!conversation) {
       conversation = await Conversation.create({
         user: waAccount.user,
+        organization: waAccount.organization,  // ← CRITICAL: was missing
         agent: agent._id,
         whatsappAccount: waAccount._id,
         customerPhone: from,
@@ -269,6 +270,6 @@ exports.receiveMessage = async (req, res) => {
 
     logger.info(`AI reply sent to ${from} in ${aiResult.responseTime}ms`);
   } catch (err) {
-    logger.error('Webhook processing error:', err.message);
+    logger.error('Webhook processing error:', err.message || err.errors ? JSON.stringify(err.errors) : err);
   }
 };
