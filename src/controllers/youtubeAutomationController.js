@@ -1,4 +1,5 @@
 const YoutubeAutomation = require('../models/YoutubeAutomation');
+const YoutubeAccount = require('../models/YoutubeAccount');
 const YoutubeAutomationService = require('../services/youtubeAutomationService');
 const AppError = require('../utils/AppError');
 
@@ -11,7 +12,23 @@ exports.getSettings = async (req, res, next) => {
         organization: req.organization._id
       });
     }
-    res.status(200).json({ status: 'success', data: settings });
+
+    // Also include connected channel info
+    const account = await YoutubeAccount.findOne({
+      organization: req.organization._id,
+      isActive: true,
+      status: 'connected'
+    }).select('channelId channelName status');
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        ...settings.toObject(),
+        channelId: account?.channelId || null,
+        channelName: account?.channelName || null,
+        isConnected: !!account,
+      }
+    });
   } catch (err) {
     next(err);
   }
