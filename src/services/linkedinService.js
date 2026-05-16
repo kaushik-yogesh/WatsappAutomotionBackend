@@ -145,28 +145,39 @@ class LinkedInService {
    */
   static async getProfile(accessToken) {
     try {
-      const response = await axios.get('https://api.linkedin.com/v2/me', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-      
-      // Get profile picture separately
-      let profilePicture = null;
+      // Try modern OIDC endpoint first (Required for new apps)
       try {
-        const picRes = await axios.get('https://api.linkedin.com/v2/me?projection=(id,profilePicture(displayImage~:playableStreams))', {
+        const response = await axios.get('https://api.linkedin.com/v2/userinfo', {
           headers: { 'Authorization': `Bearer ${accessToken}` }
         });
-        profilePicture = picRes.data.profilePicture?.['displayImage~']?.elements?.[0]?.identifiers?.[0]?.identifier;
-      } catch (e) {
-        logger.warn('Failed to fetch LinkedIn profile picture');
-      }
+        
+        return {
+          id: response.data.sub,
+          name: response.data.name,
+          profilePicture: response.data.picture,
+          email: response.data.email
+        };
+      } catch (oidcError) {
+        logger.warn('LinkedIn OIDC profile fetch failed, falling back to legacy API...');
+        
+        const response = await axios.get('https://api.linkedin.com/v2/me', {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        
+        let profilePicture = null;
+        try {
+          const picRes = await axios.get('https://api.linkedin.com/v2/me?projection=(id,profilePicture(displayImage~:playableStreams))', {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+          profilePicture = picRes.data.profilePicture?.['displayImage~']?.elements?.[0]?.identifiers?.[0]?.identifier;
+        } catch (e) {}
 
-      return {
-        id: response.data.id,
-        firstName: response.data.localizedFirstName,
-        lastName: response.data.localizedLastName,
-        name: `${response.data.localizedFirstName} ${response.data.localizedLastName}`,
-        profilePicture
-      };
+        return {
+          id: response.data.id,
+          name: `${response.data.localizedFirstName} ${response.data.localizedLastName}`,
+          profilePicture
+        };
+      }
     } catch (error) {
       logger.error(`LinkedIn getProfile error: ${error.message}`);
       throw error;
