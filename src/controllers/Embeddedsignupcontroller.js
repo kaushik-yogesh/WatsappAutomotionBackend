@@ -110,15 +110,15 @@ exports.embeddedSignupSave = async (req, res, next) => {
             return next(new AppError('phoneNumberId, wabaId, and accessToken are required.', 400));
         }
 
-        // Check duplicate
+        // Check duplicate — same phone number should not be connected to a different org
         const existing = await WhatsappAccount.findOne({ phoneNumberId });
-        if (existing && existing.user.toString() !== req.user._id.toString()) {
-            return next(new AppError('This number is already connected to another account.', 400));
+        if (existing && existing.organization?.toString() !== req.organization._id.toString()) {
+            return next(new AppError('This number is already connected to another organization.', 400));
         }
 
-        // Check plan limit
+        // Check plan limit (scoped to organization)
         const count = await WhatsappAccount.countDocuments({
-            user: req.user._id,
+            organization: req.organization._id,
             isActive: true,
             ...(existing ? { _id: { $ne: existing._id } } : {}),
         });
@@ -143,6 +143,7 @@ exports.embeddedSignupSave = async (req, res, next) => {
             { phoneNumberId },
             {
                 user: req.user._id,
+                organization: req.organization._id,  // ← CRITICAL: was missing before
                 phoneNumberId,
                 wabaId,
                 accessToken: encrypt(accessToken),
