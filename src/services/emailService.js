@@ -79,6 +79,21 @@ const emailTemplates = {
       <p style="color:#71717a;font-size:14px;">This code expires in 5 minutes. If this wasn't you, please reset your password immediately.</p>
     </div>`,
   }),
+
+  roleAssignmentOtp: (otpCode, targetUserName, newRole) => ({
+    subject: 'Action Required: Confirm User Role Assignment',
+    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;border:1px solid #e4e4e7;border-radius:12px;padding:24px;">
+      <h2 style="color:#18181b;">Confirm Role Change</h2>
+      <p>You are about to change the role of <strong>${targetUserName}</strong> to <strong>${newRole.toUpperCase()}</strong>.</p>
+      <p>To confirm this administrative action, please use the following verification code:</p>
+      <div style="background:#f4f4f5;padding:20px;text-align:center;font-size:32px;letter-spacing:10px;font-weight:bold;color:#18181b;border-radius:12px;margin:24px 0;border:2px dashed #25D366;">
+        ${otpCode}
+      </div>
+      <p style="color:#71717a;font-size:14px;">This code will expire in 10 minutes. If you did not initiate this request, please ignore this email.</p>
+      <hr style="border:0;border-top:1px solid #e4e4e7;margin:24px 0;"/>
+      <p style="font-size:12px;color:#a1a1aa;text-align:center;">Secure Admin Action • WhatsAgent Platform</p>
+    </div>`,
+  }),
 };
 
 module.exports = { sendEmail, emailTemplates };

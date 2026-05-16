@@ -12,6 +12,8 @@ router.get('/stats', adminController.getStats);
 router.get('/users', adminController.getAllUsers);
 router.get('/users/:id', adminController.getUserDetails);
 router.patch('/users/:id', adminController.updateUser);
+router.post('/users/:id/request-role-change', adminController.requestRoleChange);
+router.post('/users/:id/confirm-role-change', adminController.confirmRoleChange);
 
 router.get('/health', adminController.getSystemHealth);
 router.get('/settings', adminController.getSystemSettings);

@@ -9,6 +9,78 @@ const SystemSetting = require('../models/SystemSetting');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
 const cloudinary = require('cloudinary').v2;
+const { sendEmail, emailTemplates } = require('../services/emailService');
+const crypto = require('crypto');
+
+/**
+ * Request an OTP for role change
+ */
+exports.requestRoleChange = async (req, res, next) => {
+  try {
+    const { role } = req.body;
+    const targetUser = await User.findById(req.params.id);
+
+    if (!targetUser) return next(new AppError('User not found', 404));
+    if (!['user', 'admin'].includes(role)) return next(new AppError('Invalid role', 400));
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+
+    // Store in target user (for verification context)
+    targetUser.roleChangeOTP = hashedOtp;
+    targetUser.roleChangeOTPExpires = Date.now() + 10 * 60 * 1000; // 10 mins
+    targetUser.pendingRoleAssignment = role;
+    await targetUser.save({ validateBeforeSave: false });
+
+    // Send to CURRENT ADMIN (req.user)
+    const { subject, html } = emailTemplates.roleAssignmentOtp(otp, targetUser.name, role);
+    await sendEmail({ to: req.user.email, subject, html });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'OTP sent to your administrator email'
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Confirm role change with OTP
+ */
+exports.confirmRoleChange = async (req, res, next) => {
+  try {
+    const { otp } = req.body;
+    const targetUser = await User.findById(req.params.id);
+
+    if (!targetUser) return next(new AppError('User not found', 404));
+    if (!targetUser.roleChangeOTP || targetUser.roleChangeOTPExpires < Date.now()) {
+      return next(new AppError('OTP expired or not requested', 400));
+    }
+
+    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+    if (hashedOtp !== targetUser.roleChangeOTP) {
+      return next(new AppError('Invalid OTP', 400));
+    }
+
+    // Apply change
+    targetUser.role = targetUser.pendingRoleAssignment;
+    targetUser.roleChangeOTP = undefined;
+    targetUser.roleChangeOTPExpires = undefined;
+    targetUser.pendingRoleAssignment = undefined;
+    
+    await targetUser.save({ validateBeforeSave: false });
+
+    res.status(200).json({
+      status: 'success',
+      message: `User role updated to ${targetUser.role}`,
+      data: { user: targetUser }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
 
 /**
  * Get overall system statistics
@@ -87,7 +159,7 @@ exports.getAllUsers = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     const users = await User.aggregate([
-      { $match: { role: 'user' } },
+      { $match: {} },
       { $sort: { createdAt: -1 } },
       { $skip: skip },
       { $limit: limit },
@@ -132,7 +204,7 @@ exports.getAllUsers = async (req, res, next) => {
       }
     ]);
 
-    const total = await User.countDocuments({ role: 'user' });
+    const total = await User.countDocuments({});
 
     res.status(200).json({
       status: 'success',

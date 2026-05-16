@@ -66,6 +66,14 @@ const userSchema = new mongoose.Schema({
   deletionOTP3: String,
   deletionOTPExpires: Date,
   
+  // Role Assignment OTP
+  roleChangeOTP: String,
+  roleChangeOTPExpires: Date,
+  pendingRoleAssignment: {
+    type: String,
+    enum: ['user', 'admin']
+  },
+  
   // Social Platforms
   youtube: {
     connected: { type: Boolean, default: false },
