@@ -121,9 +121,6 @@ exports.getConnectedAccounts = async (req, res, next) => {
       });
     }
 
-      });
-    }
-
     // LinkedIn
     const LinkedInAccount = require('../models/LinkedInAccount');
     const liAccounts = await LinkedInAccount.find({ organization: req.organization._id, isActive: true });
