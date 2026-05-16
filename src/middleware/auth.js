@@ -21,7 +21,7 @@ const protect = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // Check user exists
-    const user = await User.findById(decoded.id).select('+subscription +usage');
+    const user = await User.findById(decoded.id).select('+subscription +usage +currentOrganization');
     if (!user) {
       return next(new AppError('The user belonging to this token no longer exists.', 401));
     }
