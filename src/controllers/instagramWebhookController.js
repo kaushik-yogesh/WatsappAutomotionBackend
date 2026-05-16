@@ -101,7 +101,7 @@ exports.receiveMessage = async (req, res) => {
       }
     }
   } catch (err) {
-    logger.error(`Instagram Webhook processing error: ${err.message}`);
+    logger.error(`Instagram Webhook processing error: ${err.message || (err.errors ? JSON.stringify(err.errors) : err)}`);
   }
 };
 
@@ -136,6 +136,7 @@ async function handleInstagramDM(event, igAccount, agent) {
     
     conversation = await Conversation.create({
       user: igAccount.user,
+      organization: igAccount.organization,
       agent: agent._id,
       instagramAccount: igAccount._id,
       platform: 'instagram',

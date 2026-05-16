@@ -57,6 +57,7 @@ exports.receiveMessage = async (req, res) => {
       if (!conversation) {
         conversation = await Conversation.create({
           user: tgAccount.user,
+          organization: tgAccount.organization,
           agent: agent._id,
           telegramAccount: tgAccount._id,
           platform: 'telegram',
@@ -100,6 +101,7 @@ exports.receiveMessage = async (req, res) => {
       if (!conversation) {
         conversation = await Conversation.create({
           user: tgAccount.user,
+          organization: tgAccount.organization,
           agent: agent._id,
           telegramAccount: tgAccount._id,
           platform: 'telegram',
@@ -135,6 +137,7 @@ exports.receiveMessage = async (req, res) => {
     if (!conversation) {
       conversation = await Conversation.create({
         user: tgAccount.user,
+        organization: tgAccount.organization,
         agent: agent._id,
         telegramAccount: tgAccount._id,
         platform: 'telegram',
@@ -307,6 +310,6 @@ exports.receiveMessage = async (req, res) => {
 
     logger.info(`AI reply sent to TG ${fromId} in ${aiResult.responseTime}ms`);
   } catch (err) {
-    logger.error('Telegram Webhook processing error:', err.message);
+    logger.error('Telegram Webhook processing error:', err.message || (err.errors ? JSON.stringify(err.errors) : err));
   }
 };

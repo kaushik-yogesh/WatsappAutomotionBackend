@@ -72,7 +72,7 @@ exports.receiveMessage = async (req, res) => {
       }
     }
   } catch (err) {
-    logger.error(`Facebook Webhook processing error: ${err.message}`);
+    logger.error(`Facebook Webhook processing error: ${err.message || (err.errors ? JSON.stringify(err.errors) : err)}`, { stack: err.stack });
   }
 };
 
@@ -99,6 +99,7 @@ async function handleFacebookMessage(event, fbAccount, agent) {
     
     conversation = await Conversation.create({
       user: fbAccount.user,
+      organization: fbAccount.organization,
       agent: agent._id,
       facebookAccount: fbAccount._id,
       platform: 'facebook',
