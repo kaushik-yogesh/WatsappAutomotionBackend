@@ -46,12 +46,16 @@ const userSchema = new mongoose.Schema({
     agentLimit: { type: Number, default: 1 },
     credits: { type: Number, default: 100 },
     totalCredits: { type: Number, default: 100 },
+    agentCreditLimit: { type: Number, default: 0 }, // 0 = unlimited
+    postingCreditLimit: { type: Number, default: 0 }, // 0 = unlimited
   },
 
   // Usage tracking
   usage: {
     messagesThisMonth: { type: Number, default: 0 },
     totalMessages: { type: Number, default: 0 },
+    agentCreditsUsedThisMonth: { type: Number, default: 0 },
+    postingCreditsUsedThisMonth: { type: Number, default: 0 },
     lastResetDate: { type: Date, default: Date.now },
   },
 

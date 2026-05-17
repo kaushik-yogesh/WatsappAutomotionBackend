@@ -444,8 +444,14 @@ exports.getMe = async (req, res) => {
 
 exports.updateProfile = async (req, res, next) => {
   try {
-    const { name } = req.body;
-    const user = await User.findByIdAndUpdate(req.user._id, { name }, { new: true, runValidators: true });
+    const { name, agentCreditLimit, postingCreditLimit } = req.body;
+    
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (agentCreditLimit !== undefined) updateData['subscription.agentCreditLimit'] = Math.max(0, parseInt(agentCreditLimit) || 0);
+    if (postingCreditLimit !== undefined) updateData['subscription.postingCreditLimit'] = Math.max(0, parseInt(postingCreditLimit) || 0);
+
+    const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true, runValidators: true });
     res.status(200).json({ status: 'success', data: { user } });
   } catch (err) {
     next(err);

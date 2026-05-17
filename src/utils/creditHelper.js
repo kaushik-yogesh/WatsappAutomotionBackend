@@ -28,9 +28,10 @@ exports.logTransaction = async ({ userId, type, amount, description, metadata })
  * Also increments usage counters.
  * @param {string} userId - The user ID
  * @param {number} amount - The number of credits to deduct
+ * @param {'agent'|'posting'} [spendType='agent'] - The type of credit deduction
  * @returns {Promise<number>} - The updated credits balance
  */
-exports.deductCredits = async (userId, amount) => {
+exports.deductCredits = async (userId, amount, spendType = 'agent') => {
   try {
     const User = require('../models/User');
     const user = await User.findById(userId).select('+usage +subscription');
@@ -39,12 +40,20 @@ exports.deductCredits = async (userId, amount) => {
     const currentCredits = user.subscription?.credits ?? 0;
     const newCredits = Math.max(0, currentCredits - amount);
 
+    const incFields = {
+      'usage.messagesThisMonth': 1,
+      'usage.totalMessages': 1
+    };
+
+    if (spendType === 'agent') {
+      incFields['usage.agentCreditsUsedThisMonth'] = amount;
+    } else if (spendType === 'posting') {
+      incFields['usage.postingCreditsUsedThisMonth'] = amount;
+    }
+
     await User.findByIdAndUpdate(userId, {
       $set: { 'subscription.credits': newCredits },
-      $inc: {
-        'usage.messagesThisMonth': 1,
-        'usage.totalMessages': 1
-      }
+      $inc: incFields
     });
 
     return newCredits;

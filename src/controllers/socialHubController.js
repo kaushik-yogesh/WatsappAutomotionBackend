@@ -237,6 +237,13 @@ exports.publishContent = async (req, res, next) => {
       return next(new AppError(`Insufficient credits. You need ${requiredCredits} credits but only have ${dbUser.subscription?.credits ?? 0}. Please upgrade your plan or purchase more credits.`, 400));
     }
 
+    // Check custom posting credit spend limit
+    const postingLimit = dbUser.subscription?.postingCreditLimit || 0;
+    const postingUsed = dbUser.usage?.postingCreditsUsedThisMonth || 0;
+    if (postingLimit > 0 && postingUsed + requiredCredits > postingLimit) {
+      return next(new AppError(`Spend Limit Reached: This operation would exceed your custom Monthly Posting Credit Spend Limit of ${postingLimit} credits (Already used: ${postingUsed}, Required: ${requiredCredits}). You can adjust this limit in your Account Settings.`, 400));
+    }
+
     const job = await SocialPostOrchestratorService.createJob({
       userId: req.user._id,
       organizationId: req.organization._id,
@@ -246,10 +253,9 @@ exports.publishContent = async (req, res, next) => {
       platforms: platformConfigs,
     });
 
-    // Deduct credits
-    dbUser.subscription.credits = Math.max(0, (dbUser.subscription.credits ?? 0) - requiredCredits);
-    await dbUser.save({ validateBeforeSave: false });
-    req.user.subscription.credits = dbUser.subscription.credits;
+    // Deduct credits safely and increment spend tracking
+    const newCredits = await creditHelper.deductCredits(req.user._id, requiredCredits, 'posting');
+    req.user.subscription.credits = newCredits;
 
     // Log transaction
     await creditHelper.logTransaction({

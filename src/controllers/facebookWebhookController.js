@@ -164,6 +164,14 @@ async function handleFacebookMessage(event, fbAccount, agent) {
     return;
   }
 
+  // Check custom agent credit spend limit
+  const agentLimit = user.subscription?.agentCreditLimit || 0;
+  const agentUsed = user.usage?.agentCreditsUsedThisMonth || 0;
+  if (agentLimit > 0 && agentUsed >= agentLimit) {
+    logger.warn(`User ${user._id} hit custom Monthly Agent Credit Spend Limit (${agentUsed}/${agentLimit})`);
+    return;
+  }
+
   const limits = user.getPlanLimits();
   if (user.usage.messagesThisMonth >= limits.messages) return;
 
