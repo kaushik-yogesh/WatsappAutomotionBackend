@@ -454,20 +454,26 @@ exports.updateProfile = async (req, res, next) => {
 
     const maxAllowed = Math.max(0, user.subscription?.credits ?? 0);
 
-    if (agentCreditLimit !== undefined) {
-      const val = Math.max(0, parseInt(agentCreditLimit) || 0);
-      if (val > 0 && val > maxAllowed) {
-        return next(new AppError(`Ceiling exceeded: AI Agent Spend Limit (${val}) cannot exceed your remaining available credits of ${maxAllowed} credits.`, 400));
-      }
-      updateData['subscription.agentCreditLimit'] = val;
-    }
+    if (agentCreditLimit !== undefined || postingCreditLimit !== undefined) {
+      const activeAgentLimit = agentCreditLimit !== undefined ? Math.max(0, parseInt(agentCreditLimit) || 0) : (user.subscription?.agentCreditLimit || 0);
+      const activePostingLimit = postingCreditLimit !== undefined ? Math.max(0, parseInt(postingCreditLimit) || 0) : (user.subscription?.postingCreditLimit || 0);
 
-    if (postingCreditLimit !== undefined) {
-      const val = Math.max(0, parseInt(postingCreditLimit) || 0);
-      if (val > 0 && val > maxAllowed) {
-        return next(new AppError(`Ceiling exceeded: Social Posting Spend Limit (${val}) cannot exceed your remaining available credits of ${maxAllowed} credits.`, 400));
+      if (activeAgentLimit > 0 && activeAgentLimit > maxAllowed) {
+        return next(new AppError(`Ceiling exceeded: AI Agent Spend Limit (${activeAgentLimit}) cannot exceed your remaining available credits of ${maxAllowed} credits.`, 400));
       }
-      updateData['subscription.postingCreditLimit'] = val;
+      if (activePostingLimit > 0 && activePostingLimit > maxAllowed) {
+        return next(new AppError(`Ceiling exceeded: Social Posting Spend Limit (${activePostingLimit}) cannot exceed your remaining available credits of ${maxAllowed} credits.`, 400));
+      }
+      if (activeAgentLimit > 0 && activePostingLimit > 0 && (activeAgentLimit + activePostingLimit) > maxAllowed) {
+        return next(new AppError(`Combined Ceiling exceeded: The sum of AI Agent (${activeAgentLimit}) and Social Posting (${activePostingLimit}) limits (${activeAgentLimit + activePostingLimit}) cannot exceed your remaining available credits of ${maxAllowed} credits.`, 400));
+      }
+
+      if (agentCreditLimit !== undefined) {
+        updateData['subscription.agentCreditLimit'] = activeAgentLimit;
+      }
+      if (postingCreditLimit !== undefined) {
+        updateData['subscription.postingCreditLimit'] = activePostingLimit;
+      }
     }
 
     const updatedUser = await User.findByIdAndUpdate(req.user._id, updateData, { new: true, runValidators: true });
