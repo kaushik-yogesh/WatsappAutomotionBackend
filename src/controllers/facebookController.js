@@ -25,7 +25,8 @@ exports.autoConnect = async (req, res, next) => {
           finalUserToken = tokenExchangeRes.data.access_token;
         }
       } catch (err) {
-        logger.warn(`Failed to get long-lived token: ${err.message}`);
+        const metaErr = err.response?.data?.error?.message || err.message;
+        logger.warn(`Failed to get long-lived token: ${metaErr} (Status: ${err.response?.status})`);
       }
     }
     let pagesResponse;
