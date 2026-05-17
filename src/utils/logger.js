@@ -5,10 +5,49 @@ const levels = { error: 0, warn: 1, info: 2, http: 3, debug: 4 };
 const colors = { error: 'red', warn: 'yellow', info: 'green', http: 'magenta', debug: 'white' };
 winston.addColors(colors);
 
+// Helper to safely clone objects with circular references (e.g. Axios/HTTP errors)
+const circularSafeClone = (obj, seen = new WeakSet()) => {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  
+  if (seen.has(obj)) {
+    return '[Circular]';
+  }
+  
+  if (obj instanceof Date) return new Date(obj.getTime());
+  if (obj instanceof RegExp) return new RegExp(obj);
+  
+  seen.add(obj);
+  
+  const clone = Array.isArray(obj) ? [] : {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      try {
+        const val = obj[key];
+        if (typeof val === 'object' && val !== null) {
+          clone[key] = circularSafeClone(val, seen);
+        } else {
+          clone[key] = val;
+        }
+      } catch (err) {
+        clone[key] = `[Error cloning: ${err.message}]`;
+      }
+    }
+  }
+  
+  seen.delete(obj);
+  return clone;
+};
+
 // Custom format to mask sensitive data like access_token, api_key, etc.
 const maskSensitive = winston.format((info) => {
   const sensitiveKeys = ['access_token', 'accessToken', 'api_key', 'apiKey', 'api_secret', 'apiSecret', 'secret', 'password', 'token', 'botToken'];
   
+  if (info.metadata) {
+    info.metadata = circularSafeClone(info.metadata);
+  }
+
   const mask = (obj) => {
     for (let key in obj) {
       if (sensitiveKeys.some(sk => key.toLowerCase().includes(sk.toLowerCase()))) {
@@ -34,8 +73,8 @@ const maskSensitive = winston.format((info) => {
 
 const format = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-  maskSensitive(),
   winston.format.metadata({ fillExcept: ['message', 'level', 'timestamp', 'label'] }),
+  maskSensitive(),
   winston.format.printf((info) => {
     const meta = Object.keys(info.metadata).length ? `\n${JSON.stringify(info.metadata, null, 2)}` : '';
     return `${info.timestamp} ${info.level}: ${info.message}${meta}`;
@@ -44,6 +83,7 @@ const format = winston.format.combine(
 
 const fileFormat = winston.format.combine(
   winston.format.timestamp(),
+  winston.format.metadata({ fillExcept: ['message', 'level', 'timestamp', 'label'] }),
   maskSensitive(),
   winston.format.json()
 );
