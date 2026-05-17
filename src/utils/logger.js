@@ -15,6 +15,14 @@ const circularSafeClone = (obj, seen = new WeakSet()) => {
     return '[Circular]';
   }
   
+  if (Buffer.isBuffer(obj)) {
+    return `[Buffer: ${obj.length} bytes]`;
+  }
+  
+  if (ArrayBuffer.isView(obj)) {
+    return `[TypedArray: ${obj.constructor.name || 'View'} of size ${obj.byteLength} bytes]`;
+  }
+
   if (obj instanceof Date) return new Date(obj.getTime());
   if (obj instanceof RegExp) return new RegExp(obj);
   
