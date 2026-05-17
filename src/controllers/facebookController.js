@@ -28,10 +28,17 @@ exports.autoConnect = async (req, res, next) => {
         logger.warn(`Failed to get long-lived token: ${err.message}`);
       }
     }
-    
-    const pagesResponse = await axios.get(`https://graph.facebook.com/${apiVersion}/me/accounts`, {
-      params: { access_token: finalUserToken }
-    });
+    let pagesResponse;
+    try {
+      pagesResponse = await axios.get(`https://graph.facebook.com/${apiVersion}/me/accounts`, {
+        params: { access_token: finalUserToken }
+      });
+    } catch (err) {
+      const errMsg = err.response?.data?.error?.message || err.message;
+      const errCode = err.response?.data?.error?.code || 'API_ERROR';
+      logger.error(`Facebook /me/accounts request failed: ${errMsg} (Code: ${errCode})`);
+      return next(new AppError(`Facebook API Error: ${errMsg} (Meta Code: ${errCode})`, err.response?.status || 400));
+    }
 
     const pages = pagesResponse.data.data;
     if (!pages || pages.length === 0) {
