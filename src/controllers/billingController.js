@@ -5,6 +5,7 @@ const Payment = require('../models/Payment');
 const AppError = require('../utils/AppError');
 const { sendEmail, emailTemplates } = require('../services/emailService');
 const logger = require('../utils/logger');
+const creditHelper = require('../utils/creditHelper');
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -12,6 +13,7 @@ const razorpay = new Razorpay({
 });
 
 const Plan = require('../models/Plan');
+const CreditTransaction = require('../models/CreditTransaction');
 
 exports.getPlans = async (req, res, next) => {
   try {
@@ -122,6 +124,15 @@ exports.verifyPayment = async (req, res, next) => {
       'subscription.totalCredits': planInfo.credits,
     });
 
+    // Log transaction
+    await creditHelper.logTransaction({
+      userId: req.user._id,
+      type: 'addition',
+      amount: planInfo.credits,
+      description: `Plan Activation: Activated ${planInfo.name} tier plan`,
+      metadata: { plan, razorpayPaymentId },
+    });
+
     // Send confirmation email
     const template = emailTemplates.subscriptionConfirmed(req.user.name, planInfo.name);
     await sendEmail({ to: req.user.email, ...template });
@@ -140,6 +151,18 @@ exports.getBillingHistory = async (req, res, next) => {
       .limit(20)
       .lean();
     res.status(200).json({ status: 'success', data: { payments } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getCreditsHistory = async (req, res, next) => {
+  try {
+    const transactions = await CreditTransaction.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+    res.status(200).json({ status: 'success', data: { transactions } });
   } catch (err) {
     next(err);
   }

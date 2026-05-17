@@ -9,6 +9,7 @@ router.get('/plans', billingController.getPlans);
 router.post('/create-order', validate(schemas.createOrder), billingController.createOrder);
 router.post('/verify-payment', validate(schemas.verifyPayment), billingController.verifyPayment);
 router.get('/history', billingController.getBillingHistory);
+router.get('/credits-history', billingController.getCreditsHistory);
 router.delete('/cancel', billingController.cancelSubscription);
 
 module.exports = router;

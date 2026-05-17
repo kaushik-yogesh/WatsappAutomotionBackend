@@ -7,6 +7,7 @@ const User = require('../models/User');
 const { decrypt } = require('../utils/encryption');
 const logger = require('../utils/logger');
 const { emitToUser, emitNotification } = require('../utils/socket');
+const creditHelper = require('../utils/creditHelper');
 
 // GET - Webhook verification from Meta
 exports.verifyWebhook = async (req, res) => {
@@ -268,6 +269,15 @@ exports.receiveMessage = async (req, res) => {
         'usage.totalMessages': 1,
         'subscription.credits': -creditCost,
       },
+    });
+
+    // Log transaction
+    await creditHelper.logTransaction({
+      userId: waAccount.user,
+      type: 'deduction',
+      amount: creditCost,
+      description: `AI Agent: WhatsApp reply to ${customerName || from}`,
+      metadata: { conversationId: conversation._id, platform: 'whatsapp' },
     });
 
     // 14. Update agent stats

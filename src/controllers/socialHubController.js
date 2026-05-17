@@ -11,6 +11,7 @@ const SocialPostJob = require('../models/SocialPostJob');
 const CloudinaryService = require('../services/cloudinaryService');
 const GeminiImageService = require('../services/geminiImageService');
 const logger = require('../utils/logger');
+const creditHelper = require('../utils/creditHelper');
 const normalizePostType = (type = 'post') => {
   const value = String(type || 'post').trim().toLowerCase();
   if (value === 'carosul') return 'carousel';
@@ -249,6 +250,15 @@ exports.publishContent = async (req, res, next) => {
     dbUser.subscription.credits = Math.max(0, (dbUser.subscription.credits ?? 0) - requiredCredits);
     await dbUser.save({ validateBeforeSave: false });
     req.user.subscription.credits = dbUser.subscription.credits;
+
+    // Log transaction
+    await creditHelper.logTransaction({
+      userId: req.user._id,
+      type: 'deduction',
+      amount: requiredCredits,
+      description: `Automation Hub: Published content to ${platformConfigs.length} platform(s) (${platformConfigs.map((p) => p.platform).join(', ')})`,
+      metadata: { jobId: job._id },
+    });
 
     if (!isScheduled) {
       await SocialPostOrchestratorService.runJob(job);

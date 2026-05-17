@@ -6,6 +6,7 @@ const Conversation = require('../models/Conversation');
 const User = require('../models/User');
 const logger = require('../utils/logger');
 const { emitToUser, emitNotification } = require('../utils/socket');
+const creditHelper = require('../utils/creditHelper');
 
 exports.verifyWebhook = (req, res) => {
   const mode = req.query['hub.mode'] || req.query['hub_mode'];
@@ -286,6 +287,15 @@ async function handleInstagramDM(event, igAccount, agent) {
   await User.findByIdAndUpdate(igAccount.user, {
     $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1, 'subscription.credits': -creditCost },
   });
+
+  // Log transaction
+  await creditHelper.logTransaction({
+    userId: igAccount.user,
+    type: 'deduction',
+    amount: creditCost,
+    description: `AI Agent: Instagram DM reply to ${conversation.customerName || senderId}`,
+    metadata: { conversationId: conversation._id, platform: 'instagram' },
+  });
   await Agent.findByIdAndUpdate(agent._id, {
     $inc: { 'stats.totalMessages': 2, 'stats.totalConversations': conversation.totalMessages === 2 ? 1 : 0 },
   });
@@ -378,6 +388,15 @@ async function handleInstagramComment(commentData, igAccount, agent) {
     // We don't save comments in Conversations model to save DB space, but we bill the token usage & deduct credits
     await User.findByIdAndUpdate(igAccount.user, {
       $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1, 'subscription.credits': -creditCost },
+    });
+
+    // Log transaction
+    await creditHelper.logTransaction({
+      userId: igAccount.user,
+      type: 'deduction',
+      amount: creditCost,
+      description: `AI Agent: Instagram comment reply to comment ID ${commentId}`,
+      metadata: { commentId, platform: 'instagram' },
     });
     await Agent.findByIdAndUpdate(agent._id, {
       $inc: { 'stats.totalMessages': 1 },

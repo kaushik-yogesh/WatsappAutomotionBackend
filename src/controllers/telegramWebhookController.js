@@ -6,6 +6,7 @@ const Conversation = require('../models/Conversation');
 const User = require('../models/User');
 const logger = require('../utils/logger');
 const { emitToUser, emitNotification } = require('../utils/socket');
+const creditHelper = require('../utils/creditHelper');
 
 exports.receiveMessage = async (req, res) => {
   // Always respond 200 immediately to Telegram
@@ -308,6 +309,15 @@ exports.receiveMessage = async (req, res) => {
         'usage.totalMessages': 1,
         'subscription.credits': -creditCost,
       },
+    });
+
+    // Log transaction
+    await creditHelper.logTransaction({
+      userId: tgAccount.user,
+      type: 'deduction',
+      amount: creditCost,
+      description: `AI Agent: Telegram reply to ${fromName || fromUsername || fromId}`,
+      metadata: { conversationId: conversation._id, platform: 'telegram' },
     });
 
     // 13. Update agent stats

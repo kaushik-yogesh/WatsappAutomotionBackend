@@ -11,6 +11,7 @@ const logger = require('../utils/logger');
 const cloudinary = require('cloudinary').v2;
 const { sendEmail, emailTemplates } = require('../services/emailService');
 const crypto = require('crypto');
+const creditHelper = require('../utils/creditHelper');
 
 /**
  * Request an OTP for role change
@@ -268,14 +269,34 @@ exports.updateUser = async (req, res, next) => {
         user.subscription.agentLimit = planObj.agentLimit;
         user.subscription.credits = planObj.credits;
         user.subscription.totalCredits = planObj.credits;
+
+        await creditHelper.logTransaction({
+          userId: user._id,
+          type: 'addition',
+          amount: planObj.credits,
+          description: `Admin Overrides: Active plan set to ${planObj.name} by administrator`,
+          metadata: { adminId: req.user._id, plan },
+        });
       }
     }
     if (status) user.subscription.status = status;
     if (isActive !== undefined) user.isActive = isActive;
     
     if (credits !== undefined) {
+      const oldCredits = user.subscription.credits || 0;
       user.subscription.credits = credits;
       user.subscription.totalCredits = credits;
+
+      const difference = credits - oldCredits;
+      if (difference !== 0) {
+        await creditHelper.logTransaction({
+          userId: user._id,
+          type: difference > 0 ? 'addition' : 'deduction',
+          amount: Math.abs(difference),
+          description: `Admin Overrides: Credits balance manually updated by administrator`,
+          metadata: { adminId: req.user._id, from: oldCredits, to: credits },
+        });
+      }
     }
     if (messageLimit !== undefined) user.subscription.messageLimit = messageLimit;
     if (agentLimit !== undefined) user.subscription.agentLimit = agentLimit;

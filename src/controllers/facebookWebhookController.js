@@ -6,6 +6,7 @@ const Conversation = require('../models/Conversation');
 const User = require('../models/User');
 const logger = require('../utils/logger');
 const { emitToUser, emitNotification } = require('../utils/socket');
+const creditHelper = require('../utils/creditHelper');
 
 exports.verifyWebhook = (req, res) => {
   const mode = req.query['hub.mode'] || req.query['hub_mode'];
@@ -208,6 +209,15 @@ async function handleFacebookMessage(event, fbAccount, agent) {
 
   await User.findByIdAndUpdate(fbAccount.user, {
     $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1, 'subscription.credits': -creditCost },
+  });
+
+  // Log transaction
+  await creditHelper.logTransaction({
+    userId: fbAccount.user,
+    type: 'deduction',
+    amount: creditCost,
+    description: `AI Agent: Facebook Messenger reply to ${conversation.customerName || senderId}`,
+    metadata: { conversationId: conversation._id, platform: 'facebook' },
   });
   
   await fbService.sendAction(senderId, 'typing_off');
