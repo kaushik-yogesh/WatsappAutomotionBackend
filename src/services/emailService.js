@@ -1,22 +1,143 @@
 const { Resend } = require('resend');
 const logger = require('../utils/logger');
+const SystemSetting = require('../models/SystemSetting');
 
 // Initialize Resend with API Key
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
+// Helper to compile a dynamic template with database overrides
+const compileDynamicTemplate = async (templateKey, placeholders, fallbackSubject, fallbackHtml) => {
+  try {
+    // 1. Fetch site name dynamically for branding
+    const siteNameSetting = await SystemSetting.findOne({ key: 'branding_site_name' });
+    const siteName = siteNameSetting ? siteNameSetting.value : 'WhatsAgent';
+    
+    const contactEmailSetting = await SystemSetting.findOne({ key: 'branding_contact_email' });
+    const contactEmail = contactEmailSetting ? contactEmailSetting.value : 'support@whatsappsaas.com';
+
+    const contactPhoneSetting = await SystemSetting.findOne({ key: 'branding_contact_phone' });
+    const contactPhone = contactPhoneSetting ? contactPhoneSetting.value : '+1234567890';
+
+    const footerTextSetting = await SystemSetting.findOne({ key: 'branding_footer_text' });
+    const footerText = footerTextSetting ? footerTextSetting.value : '© 2026 WhatsAgent. All rights reserved.';
+
+    const logoSetting = await SystemSetting.findOne({ key: 'branding_logo_url' });
+    const logoUrl = logoSetting ? logoSetting.value : '';
+
+    // Merge default placeholders
+    const allPlaceholders = {
+      siteName,
+      contactEmail,
+      contactPhone,
+      footerText,
+      logoUrl,
+      frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+      ...placeholders
+    };
+
+    // 2. Fetch templates from DB
+    const subjectSetting = await SystemSetting.findOne({ key: `email_template_${templateKey}_subject` });
+    const bodySetting = await SystemSetting.findOne({ key: `email_template_${templateKey}_body` });
+
+    let subject = subjectSetting ? subjectSetting.value : fallbackSubject;
+    let body = bodySetting ? bodySetting.value : fallbackHtml;
+
+    // 3. Compile placeholders using regex: replacing {{key}}
+    const replaceAll = (str, dict) => {
+      if (!str) return '';
+      return str.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (match, p1) => {
+        return dict[p1] !== undefined ? dict[p1] : match;
+      });
+    };
+
+    subject = replaceAll(subject, allPlaceholders);
+    body = replaceAll(body, allPlaceholders);
+
+    // If it's a raw body, wrap it in a gorgeous default HTML layout container with dynamic logo and footer!
+    if (!body.includes('<div') && !body.includes('<html')) {
+      body = `<div style="font-family:sans-serif;max-width:600px;margin:auto;border:1px solid #e4e4e7;border-radius:12px;padding:24px;color:#18181b;">
+        ${logoUrl ? `<div style="text-align:center;margin-bottom:20px;"><img src="${logoUrl}" alt="${siteName}" style="max-height:50px;"/></div>` : ''}
+        <h2 style="color:#25D366;margin-top:0;">${subject}</h2>
+        <div style="font-size:16px;line-height:1.6;color:#3f3f46;white-space:pre-wrap;">${body}</div>
+        <hr style="border:0;border-top:1px solid #e4e4e7;margin:24px 0;"/>
+        <p style="font-size:12px;color:#a1a1aa;text-align:center;margin-bottom:0;">${footerText}</p>
+      </div>`;
+    }
+
+    return { subject, html: body };
+  } catch (err) {
+    logger.error('Error compiling dynamic email template:', err);
+    // Return original fallback
+    return { subject: fallbackSubject, html: fallbackHtml };
+  }
+};
+
 const sendEmail = async ({ to, subject, html }) => {
   try {
+    let finalSubject = subject;
+    let finalHtml = html;
+    let templateKey = null;
+    let placeholders = {};
+
+    if (subject) {
+      if (subject.toLowerCase().includes('welcome')) {
+        templateKey = 'welcome';
+        const match = html.match(/Welcome,\s*([^!<]+)/);
+        placeholders.name = match ? match[1].trim() : 'User';
+      } else if (subject.toLowerCase().includes('verify')) {
+        templateKey = 'verifyEmail';
+        const matchName = html.match(/Hi\s*([^,]+)/);
+        placeholders.name = matchName ? matchName[1].trim() : 'User';
+        const matchToken = html.match(/token=([^"&]+)/);
+        placeholders.token = matchToken ? matchToken[1] : '';
+        placeholders.verifyLink = placeholders.token ? `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${placeholders.token}` : '';
+      } else if (subject.toLowerCase().includes('reset')) {
+        templateKey = 'resetPassword';
+        const matchName = html.match(/Hi\s*([^,]+)/);
+        placeholders.name = matchName ? matchName[1].trim() : 'User';
+        const matchToken = html.match(/token=([^"&]+)/);
+        placeholders.token = matchToken ? matchToken[1] : '';
+        placeholders.resetLink = placeholders.token ? `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${placeholders.token}` : '';
+      } else if (subject.toLowerCase().includes('subscription') || subject.toLowerCase().includes('activated')) {
+        templateKey = 'subscriptionConfirmed';
+        const matchName = html.match(/Hi\s*([^,]+)/);
+        placeholders.name = matchName ? matchName[1].trim() : 'User';
+        const matchPlan = html.match(/your\s*([^\s]+)\s*plan/);
+        placeholders.plan = matchPlan ? matchPlan[1] : 'Premium';
+      } else if (subject.toLowerCase().includes('security') || subject.toLowerCase().includes('otp') || subject.toLowerCase().includes('verification')) {
+        templateKey = 'otpChallenge';
+        const matchOtp = html.match(/>\s*([0-9A-Za-z]{6,8})\s*</) || html.match(/otp challenge/i);
+        placeholders.otp = matchOtp ? matchOtp[1].trim() : '';
+        const matchIp = html.match(/IP address:\s*<strong>([^<]+)/);
+        placeholders.ip = matchIp ? matchIp[1].trim() : 'Unknown IP';
+      } else if (subject.toLowerCase().includes('role')) {
+        templateKey = 'roleAssignmentOtp';
+        const matchOtp = html.match(/>\s*([0-9A-Za-z]{6,8})\s*</);
+        placeholders.otp = matchOtp ? matchOtp[1].trim() : '';
+        const matchUser = html.match(/change the role of\s*<strong>([^<]+)/);
+        placeholders.targetUserName = matchUser ? matchUser[1].trim() : 'User';
+        const matchRole = html.match(/to\s*<strong>([^<]+)/);
+        placeholders.newRole = matchRole ? matchRole[1].trim() : 'Admin';
+      }
+    }
+
+    if (templateKey) {
+      const compiled = await compileDynamicTemplate(templateKey, placeholders, subject, html);
+      finalSubject = compiled.subject;
+      finalHtml = compiled.html;
+    }
+
     if (!resend) {
       logger.warn('RESEND_API_KEY is missing. Email not sent, logging for debug:');
-      logger.info(`To: ${to}, Subject: ${subject}`);
+      logger.info(`To: ${to}, Subject: ${finalSubject}`);
       return;
     }
 
     const { data, error } = await resend.emails.send({
       from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
       to: [to],
-      subject: subject,
-      html: html,
+      subject: finalSubject,
+      html: finalHtml,
     });
 
     if (error) {

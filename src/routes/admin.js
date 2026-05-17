@@ -4,7 +4,10 @@ const { protect, restrictTo } = require('../middleware/auth');
 
 const router = express.Router();
 
-// All routes here are restricted to admin
+// Public branding settings endpoint (unauthenticated)
+router.get('/public-settings', adminController.getPublicSettings);
+
+// All routes below here are restricted to admin
 router.use(protect);
 router.use(restrictTo('admin'));
 

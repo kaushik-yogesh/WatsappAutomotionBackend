@@ -344,6 +344,43 @@ exports.getSystemHealth = async (req, res, next) => {
 };
 
 /**
+ * Get public branding settings
+ */
+exports.getPublicSettings = async (req, res, next) => {
+  try {
+    const keys = [
+      'branding_site_name',
+      'branding_contact_email',
+      'branding_contact_phone',
+      'branding_logo_url',
+      'branding_favicon_url',
+      'branding_footer_text'
+    ];
+    
+    const settings = await SystemSetting.find({ key: { $in: keys } });
+    
+    const config = {};
+    keys.forEach(k => {
+      const found = settings.find(s => s.key === k);
+      config[k] = found ? found.value : '';
+    });
+    
+    // Provide safe defaults
+    if (!config.branding_site_name) config.branding_site_name = 'WhatsAgent';
+    if (!config.branding_contact_email) config.branding_contact_email = 'support@whatsappsaas.com';
+    if (!config.branding_contact_phone) config.branding_contact_phone = '+1234567890';
+    if (!config.branding_footer_text) config.branding_footer_text = '© 2026 WhatsAgent. All rights reserved.';
+
+    res.status(200).json({
+      status: 'success',
+      data: config
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * Get all system settings
  */
 exports.getSystemSettings = async (req, res, next) => {
@@ -359,7 +396,19 @@ exports.getSystemSettings = async (req, res, next) => {
       { key: 'global_system_prompt', value: 'You are a helpful AI business assistant.', description: 'Base prompt for all agents' },
       { key: 'openai_api_key', value: '', description: 'System-wide OpenAI API Key' },
       { key: 'anthropic_api_key', value: '', description: 'System-wide Anthropic API Key' },
-      { key: 'default_ai_model', value: 'gpt-3.5-turbo', description: 'Fallback model for agents' }
+      { key: 'default_ai_model', value: 'gpt-3.5-turbo', description: 'Fallback model for agents' },
+      { key: 'branding_site_name', value: 'WhatsAgent', description: 'Dynamic website/SaaS name' },
+      { key: 'branding_contact_email', value: 'support@whatsappsaas.com', description: 'Support email address' },
+      { key: 'branding_contact_phone', value: '+1234567890', description: 'Support phone number' },
+      { key: 'branding_logo_url', value: '', description: 'Custom logo image URL' },
+      { key: 'branding_favicon_url', value: '', description: 'Custom favicon image URL' },
+      { key: 'branding_footer_text', value: '© 2026 WhatsAgent. All rights reserved.', description: 'Footer copyright label' },
+      { key: 'email_template_welcome_subject', value: 'Welcome to {{siteName}}, {{name}}!', description: 'Welcome email subject' },
+      { key: 'email_template_welcome_body', value: 'Hi {{name}},\n\nWelcome to {{siteName}}! We are thrilled to help you automate your client messaging and scaling your operations.\n\nBest regards,\nThe {{siteName}} Team', description: 'Welcome email text body' },
+      { key: 'email_template_forgot_password_subject', value: 'Reset your {{siteName}} Password', description: 'Forgot password email subject' },
+      { key: 'email_template_forgot_password_body', value: 'Hi {{name}},\n\nYou requested a password reset. Please use the following link to reset your password:\n\n{{resetLink}}\n\nThis link is valid for 10 minutes.\n\nBest regards,\nThe {{siteName}} Team', description: 'Forgot password email text body' },
+      { key: 'email_template_deletion_otp_subject', value: 'Account Deletion OTP - {{siteName}}', description: 'Account deletion email subject' },
+      { key: 'email_template_deletion_otp_body', value: 'Hi {{name}},\n\nYour account deletion request OTP is: {{otp}}.\n\nThis OTP is valid for 10 minutes. If you did not request this, please contact support immediately.\n\nBest regards,\nThe {{siteName}} Team', description: 'Account deletion email text body' }
     ];
 
     let settings = await SystemSetting.find();
