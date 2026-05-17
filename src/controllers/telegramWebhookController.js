@@ -302,14 +302,8 @@ exports.receiveMessage = async (req, res) => {
       platform: 'telegram',
     });
 
-    // 12. Update usage counters & deduct credits
-    await User.findByIdAndUpdate(tgAccount.user, {
-      $inc: {
-        'usage.messagesThisMonth': 1,
-        'usage.totalMessages': 1,
-        'subscription.credits': -creditCost,
-      },
-    });
+    // 12. Update usage counters & deduct credits safely
+    await creditHelper.deductCredits(tgAccount.user, creditCost);
 
     // Log transaction
     await creditHelper.logTransaction({

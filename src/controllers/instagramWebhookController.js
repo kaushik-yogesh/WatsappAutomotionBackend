@@ -284,9 +284,8 @@ async function handleInstagramDM(event, igAccount, agent) {
     platform: 'instagram',
   });
 
-  await User.findByIdAndUpdate(igAccount.user, {
-    $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1, 'subscription.credits': -creditCost },
-  });
+  // Safely deduct credits and increment usage counters
+  await creditHelper.deductCredits(igAccount.user, creditCost);
 
   // Log transaction
   await creditHelper.logTransaction({
@@ -385,10 +384,8 @@ async function handleInstagramComment(commentData, igAccount, agent) {
 
     logger.info(`Successfully replied to comment ${commentId}`);
 
-    // We don't save comments in Conversations model to save DB space, but we bill the token usage & deduct credits
-    await User.findByIdAndUpdate(igAccount.user, {
-      $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1, 'subscription.credits': -creditCost },
-    });
+    // We don't save comments in Conversations model to save DB space, but we bill the token usage & deduct credits safely
+    await creditHelper.deductCredits(igAccount.user, creditCost);
 
     // Log transaction
     await creditHelper.logTransaction({

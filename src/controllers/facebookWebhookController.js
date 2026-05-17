@@ -207,9 +207,8 @@ async function handleFacebookMessage(event, fbAccount, agent) {
     messages: conversation.messages,
   });
 
-  await User.findByIdAndUpdate(fbAccount.user, {
-    $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1, 'subscription.credits': -creditCost },
-  });
+  // Safely deduct credits and increment usage counters
+  await creditHelper.deductCredits(fbAccount.user, creditCost);
 
   // Log transaction
   await creditHelper.logTransaction({

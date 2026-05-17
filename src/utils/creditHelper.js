@@ -22,3 +22,34 @@ exports.logTransaction = async ({ userId, type, amount, description, metadata })
     console.error('Failed to log credit transaction:', err);
   }
 };
+
+/**
+ * Safely deduct credits from a user, ensuring they never drop below 0.
+ * Also increments usage counters.
+ * @param {string} userId - The user ID
+ * @param {number} amount - The number of credits to deduct
+ * @returns {Promise<number>} - The updated credits balance
+ */
+exports.deductCredits = async (userId, amount) => {
+  try {
+    const User = require('../models/User');
+    const user = await User.findById(userId).select('+usage +subscription');
+    if (!user) return 0;
+
+    const currentCredits = user.subscription?.credits ?? 0;
+    const newCredits = Math.max(0, currentCredits - amount);
+
+    await User.findByIdAndUpdate(userId, {
+      $set: { 'subscription.credits': newCredits },
+      $inc: {
+        'usage.messagesThisMonth': 1,
+        'usage.totalMessages': 1
+      }
+    });
+
+    return newCredits;
+  } catch (err) {
+    console.error('Failed to safely deduct credits:', err);
+    return 0;
+  }
+};

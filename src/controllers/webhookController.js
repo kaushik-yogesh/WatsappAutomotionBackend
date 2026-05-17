@@ -262,14 +262,8 @@ exports.receiveMessage = async (req, res) => {
       platform: 'whatsapp',
     });
 
-    // 13. Update usage counters & deduct credits
-    await User.findByIdAndUpdate(waAccount.user, {
-      $inc: {
-        'usage.messagesThisMonth': 1,
-        'usage.totalMessages': 1,
-        'subscription.credits': -creditCost,
-      },
-    });
+    // 13. Update usage counters & deduct credits safely
+    await creditHelper.deductCredits(waAccount.user, creditCost);
 
     // Log transaction
     await creditHelper.logTransaction({
