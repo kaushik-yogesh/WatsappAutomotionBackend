@@ -452,11 +452,11 @@ exports.updateProfile = async (req, res, next) => {
     const updateData = {};
     if (name !== undefined) updateData.name = name;
 
-    const maxAllowed = user.subscription?.credits ?? 0;
+    const maxAllowed = Math.max(0, user.subscription?.credits ?? 0);
 
     if (agentCreditLimit !== undefined) {
       const val = Math.max(0, parseInt(agentCreditLimit) || 0);
-      if (val > maxAllowed) {
+      if (val > 0 && val > maxAllowed) {
         return next(new AppError(`Ceiling exceeded: AI Agent Spend Limit (${val}) cannot exceed your remaining available credits of ${maxAllowed} credits.`, 400));
       }
       updateData['subscription.agentCreditLimit'] = val;
@@ -464,7 +464,7 @@ exports.updateProfile = async (req, res, next) => {
 
     if (postingCreditLimit !== undefined) {
       const val = Math.max(0, parseInt(postingCreditLimit) || 0);
-      if (val > maxAllowed) {
+      if (val > 0 && val > maxAllowed) {
         return next(new AppError(`Ceiling exceeded: Social Posting Spend Limit (${val}) cannot exceed your remaining available credits of ${maxAllowed} credits.`, 400));
       }
       updateData['subscription.postingCreditLimit'] = val;
