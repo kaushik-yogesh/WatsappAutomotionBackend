@@ -223,8 +223,17 @@ async function handleInstagramDM(event, igAccount, agent) {
     return;
   }
 
-  // Check limits
+  // Check limits & credits
   const user = await User.findById(igAccount.user).select('+usage +subscription');
+  const Plan = require('../models/Plan');
+  const userPlan = await Plan.findOne({ code: user.subscription?.plan || 'free' });
+  const creditCost = userPlan ? userPlan.agentMsgCreditCost : 1;
+
+  if ((user.subscription?.credits ?? 0) < creditCost) {
+    logger.warn(`User ${user._id} hit credit limit for AI agent responses`);
+    return;
+  }
+
   const limits = user.getPlanLimits();
   if (user.usage.messagesThisMonth >= limits.messages) return;
 
@@ -275,7 +284,7 @@ async function handleInstagramDM(event, igAccount, agent) {
   });
 
   await User.findByIdAndUpdate(igAccount.user, {
-    $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1 },
+    $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1, 'subscription.credits': -creditCost },
   });
   await Agent.findByIdAndUpdate(agent._id, {
     $inc: { 'stats.totalMessages': 2, 'stats.totalConversations': conversation.totalMessages === 2 ? 1 : 0 },
@@ -329,6 +338,23 @@ async function handleInstagramComment(commentData, igAccount, agent) {
 
     logger.info(`[COMMENT PROCESSING]: Found enabled bot for ${igAccount.igUsername}. Generating reply for: "${text}"`);
 
+    // Check limits & credits
+    const user = await User.findById(igAccount.user).select('+usage +subscription');
+    const Plan = require('../models/Plan');
+    const userPlan = await Plan.findOne({ code: user.subscription?.plan || 'free' });
+    const creditCost = userPlan ? userPlan.agentMsgCreditCost : 1;
+
+    if ((user.subscription?.credits ?? 0) < creditCost) {
+      logger.warn(`User ${user._id} hit credit limit for AI comment responses`);
+      return;
+    }
+
+    const limits = user.getPlanLimits();
+    if (user.usage.messagesThisMonth >= limits.messages) {
+      logger.warn(`User ${user._id} hit message limit for AI comment responses`);
+      return;
+    }
+
     // 2. Generate AI response
     const contextMessages = [];
     const fullPrompt = (systemPrompt || "Reply to this Instagram comment.") + "\n\nRules: Keep it short, friendly, and under 2 sentences. Use emojis if appropriate.";
@@ -349,9 +375,9 @@ async function handleInstagramComment(commentData, igAccount, agent) {
 
     logger.info(`Successfully replied to comment ${commentId}`);
 
-    // We don't save comments in Conversations model to save DB space, but we bill the token usage
+    // We don't save comments in Conversations model to save DB space, but we bill the token usage & deduct credits
     await User.findByIdAndUpdate(igAccount.user, {
-      $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1 },
+      $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1, 'subscription.credits': -creditCost },
     });
     await Agent.findByIdAndUpdate(agent._id, {
       $inc: { 'stats.totalMessages': 1 },

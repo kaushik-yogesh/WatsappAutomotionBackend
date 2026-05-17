@@ -11,34 +11,41 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
-const PLANS = {
-  starter:    { amount: 1000,  label: 'Starter',    messages: 1000,  agents: 3  },
-  pro:        { amount: 149900, label: 'Pro',         messages: 5000,  agents: 10 },
-  enterprise: { amount: 499900, label: 'Enterprise',  messages: 50000, agents: 50 },
-};
+const Plan = require('../models/Plan');
 
-exports.getPlans = (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    data: {
-      plans: Object.entries(PLANS).map(([key, val]) => ({
-        id: key,
-        ...val,
-        amountInRupees: val.amount / 100,
-      })),
-      currentPlan: req.user.subscription?.plan,
-    },
-  });
+exports.getPlans = async (req, res, next) => {
+  try {
+    const plans = await Plan.find({ isActive: true });
+    res.status(200).json({
+      status: 'success',
+      data: {
+        plans: plans.map((p) => ({
+          id: p.code,
+          label: p.name,
+          amount: p.price * 100, // Razorpay amount in paisa
+          amountInRupees: p.price,
+          messages: p.messageLimit,
+          agents: p.agentLimit,
+          credits: p.credits,
+          description: p.description,
+        })),
+        currentPlan: req.user.subscription?.plan,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 exports.createOrder = async (req, res, next) => {
   try {
     const { plan } = req.body;
-    if (!PLANS[plan]) return next(new AppError('Invalid plan selected.', 400));
+    const planInfo = await Plan.findOne({ code: plan, isActive: true });
+    if (!planInfo) return next(new AppError('Invalid plan selected.', 400));
 
-    const planInfo = PLANS[plan];
+    const amountInPaisa = planInfo.price * 100;
     const order = await razorpay.orders.create({
-      amount: planInfo.amount,
+      amount: amountInPaisa,
       currency: 'INR',
       receipt: `BGS${req.user._id}${Date.now()}`,
       notes: { userId: req.user._id.toString(), plan },
@@ -48,7 +55,7 @@ exports.createOrder = async (req, res, next) => {
       user: req.user._id,
       razorpayOrderId: order.id,
       plan,
-      amount: planInfo.amount,
+      amount: amountInPaisa,
       status: 'created',
     });
 
@@ -56,11 +63,11 @@ exports.createOrder = async (req, res, next) => {
       status: 'success',
       data: {
         orderId: order.id,
-        amount: planInfo.amount,
+        amount: amountInPaisa,
         currency: 'INR',
         keyId: process.env.RAZORPAY_KEY_ID,
         plan,
-        planLabel: planInfo.label,
+        planLabel: planInfo.name,
         prefill: { name: req.user.name, email: req.user.email },
       },
     });
@@ -85,7 +92,9 @@ exports.verifyPayment = async (req, res, next) => {
       return next(new AppError('Payment verification failed. Invalid signature.', 400));
     }
 
-    const planInfo = PLANS[plan];
+    const planInfo = await Plan.findOne({ code: plan });
+    if (!planInfo) return next(new AppError('Invalid plan selected.', 400));
+
     const now = new Date();
     const periodEnd = new Date(now);
     periodEnd.setMonth(periodEnd.getMonth() + 1);
@@ -107,15 +116,17 @@ exports.verifyPayment = async (req, res, next) => {
       'subscription.status': 'active',
       'subscription.currentPeriodStart': now,
       'subscription.currentPeriodEnd': periodEnd,
-      'subscription.messageLimit': planInfo.messages,
-      'subscription.agentLimit': planInfo.agents,
+      'subscription.messageLimit': planInfo.messageLimit,
+      'subscription.agentLimit': planInfo.agentLimit,
+      'subscription.credits': planInfo.credits,
+      'subscription.totalCredits': planInfo.credits,
     });
 
     // Send confirmation email
-    const template = emailTemplates.subscriptionConfirmed(req.user.name, planInfo.label);
+    const template = emailTemplates.subscriptionConfirmed(req.user.name, planInfo.name);
     await sendEmail({ to: req.user.email, ...template });
 
-    res.status(200).json({ status: 'success', message: `${planInfo.label} plan activated successfully!` });
+    res.status(200).json({ status: 'success', message: `${planInfo.name} plan activated successfully!` });
   } catch (err) {
     logger.error('Verify payment error:', err);
     next(err);

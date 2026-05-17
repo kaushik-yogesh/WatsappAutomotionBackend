@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const logger = require('../utils/logger');
+const seedPlans = require('../utils/planSeeder');
 
 const connectDB = async () => {
   try {
@@ -10,6 +11,7 @@ const connectDB = async () => {
     });
 
     logger.info(`MongoDB Connected: ${conn.connection.host}`);
+    await seedPlans();
 
     mongoose.connection.on('error', (err) => {
       logger.error('MongoDB connection error:', err);

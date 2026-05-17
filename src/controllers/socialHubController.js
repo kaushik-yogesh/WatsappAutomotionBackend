@@ -223,6 +223,19 @@ exports.publishContent = async (req, res, next) => {
       return next(new AppError('Scheduled date/time must be in the future.', 400));
     }
 
+    const Plan = require('../models/Plan');
+    const userPlan = await Plan.findOne({ code: req.user.subscription?.plan || 'free' });
+    const creditCostPerPost = userPlan ? userPlan.postCreditCost : 1;
+    const requiredCredits = platformConfigs.length * creditCostPerPost;
+
+    const User = require('../models/User');
+    const dbUser = await User.findById(req.user._id);
+    if (!dbUser) return next(new AppError('User not found', 404));
+
+    if ((dbUser.subscription?.credits ?? 0) < requiredCredits) {
+      return next(new AppError(`Insufficient credits. You need ${requiredCredits} credits but only have ${dbUser.subscription?.credits ?? 0}. Please upgrade your plan or purchase more credits.`, 400));
+    }
+
     const job = await SocialPostOrchestratorService.createJob({
       userId: req.user._id,
       organizationId: req.organization._id,
@@ -231,6 +244,11 @@ exports.publishContent = async (req, res, next) => {
       scheduledAt: scheduleDate,
       platforms: platformConfigs,
     });
+
+    // Deduct credits
+    dbUser.subscription.credits = Math.max(0, (dbUser.subscription.credits ?? 0) - requiredCredits);
+    await dbUser.save({ validateBeforeSave: false });
+    req.user.subscription.credits = dbUser.subscription.credits;
 
     if (!isScheduled) {
       await SocialPostOrchestratorService.runJob(job);

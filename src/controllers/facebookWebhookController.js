@@ -152,8 +152,17 @@ async function handleFacebookMessage(event, fbAccount, agent) {
     return;
   }
 
-  // AI Response Logic
+  // AI Response Logic & Credit Checks
   const user = await User.findById(fbAccount.user).select('+usage +subscription');
+  const Plan = require('../models/Plan');
+  const userPlan = await Plan.findOne({ code: user.subscription?.plan || 'free' });
+  const creditCost = userPlan ? userPlan.agentMsgCreditCost : 1;
+
+  if ((user.subscription?.credits ?? 0) < creditCost) {
+    logger.warn(`User ${user._id} hit credit limit for AI agent responses`);
+    return;
+  }
+
   const limits = user.getPlanLimits();
   if (user.usage.messagesThisMonth >= limits.messages) return;
 
@@ -198,7 +207,7 @@ async function handleFacebookMessage(event, fbAccount, agent) {
   });
 
   await User.findByIdAndUpdate(fbAccount.user, {
-    $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1 },
+    $inc: { 'usage.messagesThisMonth': 1, 'usage.totalMessages': 1, 'subscription.credits': -creditCost },
   });
   
   await fbService.sendAction(senderId, 'typing_off');

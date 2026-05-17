@@ -254,14 +254,31 @@ exports.getUserDetails = async (req, res, next) => {
  */
 exports.updateUser = async (req, res, next) => {
   try {
-    const { plan, status, isActive } = req.body;
+    const { plan, status, isActive, credits, messageLimit, agentLimit } = req.body;
     
     const user = await User.findById(req.params.id);
     if (!user) return next(new AppError('User not found', 404));
 
-    if (plan) user.subscription.plan = plan;
+    if (plan) {
+      user.subscription.plan = plan;
+      const Plan = require('../models/Plan');
+      const planObj = await Plan.findOne({ code: plan });
+      if (planObj) {
+        user.subscription.messageLimit = planObj.messageLimit;
+        user.subscription.agentLimit = planObj.agentLimit;
+        user.subscription.credits = planObj.credits;
+        user.subscription.totalCredits = planObj.credits;
+      }
+    }
     if (status) user.subscription.status = status;
     if (isActive !== undefined) user.isActive = isActive;
+    
+    if (credits !== undefined) {
+      user.subscription.credits = credits;
+      user.subscription.totalCredits = credits;
+    }
+    if (messageLimit !== undefined) user.subscription.messageLimit = messageLimit;
+    if (agentLimit !== undefined) user.subscription.agentLimit = agentLimit;
 
     await user.save({ validateBeforeSave: false });
 
@@ -552,6 +569,105 @@ exports.cancelDeletionRequest = async (req, res, next) => {
       status: 'success',
       message: 'Deletion request cancelled and account restored.',
       data: { user }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const Plan = require('../models/Plan');
+
+/**
+ * Get all subscription plans
+ */
+exports.getAllPlans = async (req, res, next) => {
+  try {
+    const plans = await Plan.find().sort({ price: 1 });
+    res.status(200).json({
+      status: 'success',
+      results: plans.length,
+      data: { plans }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Create a new subscription plan
+ */
+exports.createPlan = async (req, res, next) => {
+  try {
+    const { name, code, price, credits, messageLimit, agentLimit, postCreditCost, agentMsgCreditCost, description, isActive } = req.body;
+
+    if (!name || !code || price === undefined || credits === undefined) {
+      return next(new AppError('Please provide name, code, price and credits for the plan', 400));
+    }
+
+    const existingPlan = await Plan.findOne({ $or: [{ name }, { code }] });
+    if (existingPlan) {
+      return next(new AppError('Plan name or code already exists', 400));
+    }
+
+    const newPlan = await Plan.create({
+      name,
+      code,
+      price,
+      credits,
+      messageLimit,
+      agentLimit,
+      postCreditCost,
+      agentMsgCreditCost,
+      description,
+      isActive: isActive !== undefined ? isActive : true
+    });
+
+    res.status(201).json({
+      status: 'success',
+      data: { plan: newPlan }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Update an existing subscription plan
+ */
+exports.updatePlan = async (req, res, next) => {
+  try {
+    const plan = await Plan.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true
+    });
+
+    if (!plan) {
+      return next(new AppError('Plan not found', 404));
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: { plan }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Delete a subscription plan
+ */
+exports.deletePlan = async (req, res, next) => {
+  try {
+    const plan = await Plan.findByIdAndDelete(req.params.id);
+
+    if (!plan) {
+      return next(new AppError('Plan not found', 404));
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Plan successfully deleted'
     });
   } catch (err) {
     next(err);

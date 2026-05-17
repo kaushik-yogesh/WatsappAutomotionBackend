@@ -27,4 +27,10 @@ router.delete('/orphan-media', adminController.deleteMedia);
 router.get('/deletion-requests', adminController.getDeletionRequests);
 router.post('/users/:id/cancel-deletion', adminController.cancelDeletionRequest);
 
+// Plan Management
+router.get('/plans', adminController.getAllPlans);
+router.post('/plans', adminController.createPlan);
+router.patch('/plans/:id', adminController.updatePlan);
+router.delete('/plans/:id', adminController.deletePlan);
+
 module.exports = router;

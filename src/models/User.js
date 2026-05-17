@@ -36,7 +36,7 @@ const userSchema = new mongoose.Schema({
 
   // Subscription
   subscription: {
-    plan: { type: String, enum: ['free', 'starter', 'pro', 'enterprise'], default: 'free' },
+    plan: { type: String, default: 'free' },
     status: { type: String, enum: ['active', 'inactive', 'cancelled', 'past_due'], default: 'active' },
     razorpaySubscriptionId: String,
     razorpayCustomerId: String,
@@ -44,6 +44,8 @@ const userSchema = new mongoose.Schema({
     currentPeriodEnd: Date,
     messageLimit: { type: Number, default: 100 },
     agentLimit: { type: Number, default: 1 },
+    credits: { type: Number, default: 100 },
+    totalCredits: { type: Number, default: 100 },
   },
 
   // Usage tracking
@@ -148,10 +150,10 @@ userSchema.methods.createPasswordResetToken = function () {
 // Plan limits
 userSchema.methods.getPlanLimits = function () {
   const limits = {
-    free:       { messages: 100,   agents: 1,  label: 'Free' },
-    starter:    { messages: 1000,  agents: 3,  label: 'Starter' },
-    pro:        { messages: 5000,  agents: 10, label: 'Pro' },
-    enterprise: { messages: 50000, agents: 50, label: 'Enterprise' },
+    free:       { messages: 100,   agents: 1,  credits: 100,   label: 'Free' },
+    starter:    { messages: 1000,  agents: 3,  credits: 1000,  label: 'Starter' },
+    pro:        { messages: 5000,  agents: 10, credits: 5000,  label: 'Pro' },
+    enterprise: { messages: 50000, agents: 50, credits: 50000, label: 'Enterprise' },
   };
   return limits[this.subscription.plan] || limits.free;
 };

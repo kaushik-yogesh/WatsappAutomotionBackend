@@ -187,8 +187,17 @@ exports.receiveMessage = async (req, res) => {
       return;
     }
 
-    // 6. Check user message limit
+    // 6. Check user message limit & credits
     const user = await User.findById(waAccount.user).select('+usage +subscription');
+    const Plan = require('../models/Plan');
+    const userPlan = await Plan.findOne({ code: user.subscription?.plan || 'free' });
+    const creditCost = userPlan ? userPlan.agentMsgCreditCost : 1;
+
+    if ((user.subscription?.credits ?? 0) < creditCost) {
+      logger.warn(`User ${user._id} hit credit limit for AI agent responses`);
+      return;
+    }
+
     const limits = user.getPlanLimits();
     if (user.usage.messagesThisMonth >= limits.messages) {
       logger.warn(`User ${user._id} hit message limit`);
@@ -252,11 +261,12 @@ exports.receiveMessage = async (req, res) => {
       platform: 'whatsapp',
     });
 
-    // 13. Update usage counters
+    // 13. Update usage counters & deduct credits
     await User.findByIdAndUpdate(waAccount.user, {
       $inc: {
         'usage.messagesThisMonth': 1,
         'usage.totalMessages': 1,
+        'subscription.credits': -creditCost,
       },
     });
 
