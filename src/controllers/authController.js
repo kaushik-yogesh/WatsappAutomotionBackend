@@ -446,13 +446,32 @@ exports.updateProfile = async (req, res, next) => {
   try {
     const { name, agentCreditLimit, postingCreditLimit } = req.body;
     
+    const user = await User.findById(req.user._id);
+    if (!user) return next(new AppError('User not found.', 404));
+
     const updateData = {};
     if (name !== undefined) updateData.name = name;
-    if (agentCreditLimit !== undefined) updateData['subscription.agentCreditLimit'] = Math.max(0, parseInt(agentCreditLimit) || 0);
-    if (postingCreditLimit !== undefined) updateData['subscription.postingCreditLimit'] = Math.max(0, parseInt(postingCreditLimit) || 0);
 
-    const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true, runValidators: true });
-    res.status(200).json({ status: 'success', data: { user } });
+    const maxAllowed = user.subscription?.credits ?? 0;
+
+    if (agentCreditLimit !== undefined) {
+      const val = Math.max(0, parseInt(agentCreditLimit) || 0);
+      if (val > maxAllowed) {
+        return next(new AppError(`Ceiling exceeded: AI Agent Spend Limit (${val}) cannot exceed your remaining available credits of ${maxAllowed} credits.`, 400));
+      }
+      updateData['subscription.agentCreditLimit'] = val;
+    }
+
+    if (postingCreditLimit !== undefined) {
+      const val = Math.max(0, parseInt(postingCreditLimit) || 0);
+      if (val > maxAllowed) {
+        return next(new AppError(`Ceiling exceeded: Social Posting Spend Limit (${val}) cannot exceed your remaining available credits of ${maxAllowed} credits.`, 400));
+      }
+      updateData['subscription.postingCreditLimit'] = val;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(req.user._id, updateData, { new: true, runValidators: true });
+    res.status(200).json({ status: 'success', data: { user: updatedUser } });
   } catch (err) {
     next(err);
   }
