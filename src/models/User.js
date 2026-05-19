@@ -60,6 +60,7 @@ const userSchema = new mongoose.Schema({
   },
 
   isActive: { type: Boolean, default: true },
+  isBetaTester: { type: Boolean, default: false },
   
   // Deletion Request
   isDeletionPending: { type: Boolean, default: false },

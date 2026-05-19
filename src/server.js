@@ -168,6 +168,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/fraud-admin', fraudAdminRoutes);
 app.use('/api/organizations', organizationRoutes);
+app.use('/api/feature-flags', require('./routes/featureFlags'));
 
 // ─── 404 Handler ─────────────────────────────────────────
 app.all('*', (req, res, next) => {
