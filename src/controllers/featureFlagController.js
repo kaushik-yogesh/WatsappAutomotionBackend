@@ -87,11 +87,22 @@ exports.createFlag = async (req, res, next) => {
  */
 exports.updateFlag = async (req, res, next) => {
   try {
-    const { name, description, rules } = req.body;
+    const { key, name, description, rules } = req.body;
 
     const flag = await FeatureFlag.findById(req.params.id);
     if (!flag) {
       return next(new AppError('Feature flag not found', 404));
+    }
+
+    if (key) {
+      const sanitizedKey = key.toLowerCase().trim();
+      if (sanitizedKey !== flag.key) {
+        const existingFlag = await FeatureFlag.findOne({ key: sanitizedKey });
+        if (existingFlag) {
+          return next(new AppError(`Feature flag with key '${sanitizedKey}' already exists`, 400));
+        }
+        flag.key = sanitizedKey;
+      }
     }
 
     if (name) flag.name = name;
