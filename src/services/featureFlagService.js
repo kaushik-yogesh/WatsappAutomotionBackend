@@ -22,6 +22,9 @@ class FeatureFlagService {
    * Evaluate a single feature flag for a user
    */
   evaluateFlag(flag, user) {
+    // Admins always have access to all features (no feature flag restrictions)
+    if (user && user.role === 'admin') return true;
+
     // 1. Global kill switch
     if (!flag.isActive) return false;
 

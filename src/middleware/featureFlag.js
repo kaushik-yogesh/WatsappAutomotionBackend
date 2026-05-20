@@ -9,6 +9,11 @@ const AppError = require('../utils/AppError');
 const checkFeatureFlag = (flagKey) => {
   return async (req, res, next) => {
     try {
+      // Admins always bypass all feature flag checks (requires 'protect' middleware before this)
+      if (req.user && req.user.role === 'admin') {
+        return next();
+      }
+
       const flag = await FeatureFlag.findOne({ key: flagKey.toLowerCase() });
       
       if (!flag) {
