@@ -830,3 +830,15 @@ exports.linkedinCallback = async (req, res, next) => {
     next(new AppError('Failed to connect LinkedIn account: ' + (err.response?.data?.error_description || err.message), 500));
   }
 };
+
+exports.disconnectLinkedInAccount = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const deleted = await LinkedInAccount.findOneAndDelete({ _id: id, organization: req.organization._id });
+    if (!deleted) return next(new AppError('LinkedIn account not found', 404));
+    res.status(200).json({ status: 'success', message: 'LinkedIn account disconnected successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+

@@ -24,5 +24,6 @@ router.post('/delete-post', socialHubController.deletePost);
 router.get('/insights', socialHubController.getInsights);
 router.get('/linkedin/auth-url', socialHubController.getLinkedInAuthUrl);
 router.post('/linkedin/callback', socialHubController.linkedinCallback);
+router.delete('/linkedin/:id', socialHubController.disconnectLinkedInAccount);
 
 module.exports = router;

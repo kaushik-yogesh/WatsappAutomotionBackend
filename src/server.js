@@ -130,6 +130,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// ─── Root Route ───────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Welcome to the WhatsApp AI Agent SaaS API',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // ─── Health Check ─────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.status(200).json({
