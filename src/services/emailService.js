@@ -84,6 +84,18 @@ const sendEmail = async ({ to, subject, html }) => {
         templateKey = 'welcome';
         const match = html.match(/Welcome,\s*([^!<]+)/);
         placeholders.name = match ? match[1].trim() : 'User';
+      } else if (subject.includes('Admin Authorization Code')) {
+        templateKey = 'adminSignupOtp';
+        const matchOtp = html.match(/>\s*([0-9A-Za-z]{6,8})\s*</) || html.match(/<b>([0-9A-Za-z]{6,8})<\/b>/);
+        placeholders.otp = matchOtp ? matchOtp[1].trim() : '';
+        const matchEmail = html.match(/request:\s*<strong>([^<]+)/);
+        placeholders.targetEmail = matchEmail ? matchEmail[1].trim() : '';
+      } else if (subject.includes('Admin Enrollment Approved')) {
+        templateKey = 'adminSignupApproved';
+        const matchName = html.match(/Hi\s*([^,]+)/);
+        placeholders.name = matchName ? matchName[1].trim() : 'Admin';
+        const matchKey = html.match(/Access Key:\s*([^\s<]+)/);
+        placeholders.accessKey = matchKey ? matchKey[1].trim() : '';
       } else if (subject.toLowerCase().includes('verify')) {
         templateKey = 'verifyEmail';
         const matchName = html.match(/Hi\s*([^,]+)/);
@@ -213,6 +225,37 @@ const emailTemplates = {
       <p style="color:#71717a;font-size:14px;">This code will expire in 10 minutes. If you did not initiate this request, please ignore this email.</p>
       <hr style="border:0;border-top:1px solid #e4e4e7;margin:24px 0;"/>
       <p style="font-size:12px;color:#a1a1aa;text-align:center;">Secure Admin Action • WhatsAgent Platform</p>
+    </div>`,
+  }),
+
+  adminSignupOtp: (otpCode, targetEmail) => ({
+    subject: '🔒 Admin Authorization Code',
+    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;border:1px solid #e4e4e7;border-radius:12px;padding:24px;color:#18181b;">
+      <h2 style="color:#ef4444;margin-top:0;">Admin Approval Verification</h2>
+      <p>You are attempting to approve a new administrator signup request: <strong>${targetEmail}</strong>.</p>
+      <p>Please use the following dynamic verification code to complete this secure action:</p>
+      <div style="background:#f4f4f5;padding:20px;text-align:center;font-size:32px;letter-spacing:5px;font-weight:bold;color:#18181b;border-radius:12px;margin:24px 0;border:2px dashed #ef4444;">
+        ${otpCode}
+      </div>
+      <p style="color:#71717a;font-size:14px;">This security code will expire in 5 minutes. If you did not initiate this request, please contact system security immediately.</p>
+      <hr style="border:0;border-top:1px solid #e4e4e7;margin:24px 0;"/>
+      <p style="font-size:12px;color:#a1a1aa;text-align:center;">Secure Admin Action • WhatsAgent Platform</p>
+    </div>`,
+  }),
+
+  adminSignupApproved: (name, accessKey) => ({
+    subject: '🎉 Admin Enrollment Approved',
+    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;border:1px solid #e4e4e7;border-radius:12px;padding:24px;color:#18181b;">
+      <h2 style="color:#25D366;margin-top:0;">Enrollment Approved!</h2>
+      <p>Hi ${name},</p>
+      <p>Your request to join the platform as a **System Administrator** has been approved.</p>
+      <p>Your unique administrative credential details are below. Keep this key completely secure:</p>
+      <div style="background:#f4f4f5;padding:16px;border-radius:8px;font-family:monospace;font-size:18px;text-align:center;margin:20px 0;border:1px dashed #25D366;color:#18181b;font-weight:bold;">
+        Access Key: ${accessKey}
+      </div>
+      <p>You can now log in at the admin portal using your registered email and password.</p>
+      <hr style="border:0;border-top:1px solid #e4e4e7;margin:24px 0;"/>
+      <p style="font-size:12px;color:#a1a1aa;text-align:center;">WhatsAgent Platform Security Team</p>
     </div>`,
   }),
 };

@@ -3,6 +3,7 @@ const User = require('../models/User');
 const featureFlagService = require('../services/featureFlagService');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
+const { logAdminActivity } = require('../utils/adminLogger');
 
 /**
  * Get all feature flags (Admin Only)
@@ -228,6 +229,13 @@ exports.updateUserBetaStatus = async (req, res, next) => {
     await user.save({ validateBeforeSave: false });
 
     logger.info(`User beta status updated: ${user.email} isBetaTester=${user.isBetaTester} by admin ${req.user.email}`);
+
+    // Log administrative beta tester status override activity
+    await logAdminActivity(
+      req, 
+      isBetaTester ? 'promote_beta' : 'demote_beta', 
+      `${isBetaTester ? 'Promoted' : 'Demoted'} user ${user.email} ${isBetaTester ? 'to' : 'from'} Beta Tester`
+    );
 
     res.status(200).json({
       status: 'success',

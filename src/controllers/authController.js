@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('../models/User');
+const AdminSignupRequest = require('../models/AdminSignupRequest');
 const AppError = require('../utils/AppError');
 const { sendEmail, emailTemplates } = require('../services/emailService');
 const fraudDetectionService = require('../services/fraudDetectionService');
@@ -117,15 +118,41 @@ exports.adminRegister = async (req, res, next) => {
     const existing = await User.findOne({ email });
     if (existing) return next(new AppError('Email already registered.', 400));
 
-    const user = await User.create({ 
-      name, 
-      email, 
-      password, 
-      role: 'admin',
-      isEmailVerified: true // Auto-verify admin
+    // Check if there is already a pending request for this email
+    const pendingRequest = await AdminSignupRequest.findOne({ email });
+    if (pendingRequest) {
+      return next(new AppError('A signup request for this email is already pending approval.', 400));
+    }
+
+    // Check if any admin users exist in the system (bootstrap seed check)
+    const adminExists = await User.exists({ role: 'admin' });
+
+    if (!adminExists) {
+      // Seed mode: Instantly register the first admin
+      const user = await User.create({ 
+        name, 
+        email, 
+        password, 
+        role: 'admin',
+        isEmailVerified: true // Auto-verify seed admin
+      });
+
+      logger.info(`Bootstrap seed admin registered: ${email}`);
+      return sendTokens(user, 201, res);
+    }
+
+    // Standard mode: Create a pending AdminSignupRequest
+    await AdminSignupRequest.create({
+      name,
+      email,
+      password, // Plain text here, will be hashed when creating User via Mongoose pre-save hook
+      status: 'pending'
     });
 
-    sendTokens(user, 201, res);
+    res.status(202).json({
+      status: 'success',
+      message: 'Admin signup request submitted successfully. It will expire in 1 hour if not approved by an existing admin.'
+    });
   } catch (err) {
     logger.error('Admin Register error:', err);
     next(err);

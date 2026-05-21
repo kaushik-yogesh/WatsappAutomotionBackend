@@ -12,6 +12,10 @@ const cloudinary = require('cloudinary').v2;
 const { sendEmail, emailTemplates } = require('../services/emailService');
 const crypto = require('crypto');
 const creditHelper = require('../utils/creditHelper');
+const AdminSignupRequest = require('../models/AdminSignupRequest');
+const AdminActivity = require('../models/AdminActivity');
+const fraudDetectionService = require('../services/fraudDetectionService');
+const { logAdminActivity } = require('../utils/adminLogger');
 
 /**
  * Request an OTP for role change
@@ -66,12 +70,16 @@ exports.confirmRoleChange = async (req, res, next) => {
     }
 
     // Apply change
+    const oldRole = targetUser.role;
     targetUser.role = targetUser.pendingRoleAssignment;
     targetUser.roleChangeOTP = undefined;
     targetUser.roleChangeOTPExpires = undefined;
     targetUser.pendingRoleAssignment = undefined;
     
     await targetUser.save({ validateBeforeSave: false });
+
+    // Log administrative role change activity
+    await logAdminActivity(req, 'change_user_role', `Updated role of user ${targetUser.email} from ${oldRole} to ${targetUser.role}`);
 
     res.status(200).json({
       status: 'success',
@@ -333,6 +341,13 @@ exports.updateUser = async (req, res, next) => {
 
     await user.save({ validateBeforeSave: false });
 
+    // Log administrative user details override activity
+    await logAdminActivity(
+      req, 
+      'update_user', 
+      `Manually updated user details for ${user.email} (plan: ${plan || 'unchanged'}, isActive: ${isActive !== undefined ? isActive : 'unchanged'}, credits: ${credits !== undefined ? credits : 'unchanged'})`
+    );
+
     res.status(200).json({
       status: 'success',
       data: { user }
@@ -473,6 +488,9 @@ exports.updateSystemSetting = async (req, res, next) => {
       { value, updatedBy: req.user._id },
       { new: true, upsert: true }
     );
+
+    // Log administrative system settings change activity
+    await logAdminActivity(req, 'update_setting', `Updated system setting '${key}' to value '${value}'`);
 
     res.status(200).json({
       status: 'success',
@@ -1030,6 +1048,13 @@ exports.refundPayment = async (req, res, next) => {
       }
     }
 
+    // Log administrative payment refund activity
+    await logAdminActivity(
+      req, 
+      'refund_payment', 
+      `Refunded payment ${payment.razorpayPaymentId || payment._id} of amount ₹${payment.amount / 100} for user ${targetUser.email} and revoked subscription`
+    );
+
     res.status(200).json({
       status: 'success',
       message: 'Payment refunded and subscription successfully revoked.',
@@ -1037,6 +1062,239 @@ exports.refundPayment = async (req, res, next) => {
     });
   } catch (err) {
     logger.error('Error refunding payment:', err);
+    next(err);
+  }
+};
+
+/**
+ * EXPORT LOG ACTIVITY HELPER
+ */
+exports.logActivity = async (req, action, details) => {
+  return logAdminActivity(req, action, details);
+};
+
+/**
+ * Get all pending admin signup requests
+ */
+exports.getSignupRequests = async (req, res, next) => {
+  try {
+    const requests = await AdminSignupRequest.find({ status: 'pending' }).sort({ createdAt: -1 });
+    res.status(200).json({
+      status: 'success',
+      results: requests.length,
+      data: { requests }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Send OTP for approving admin signup requests
+ */
+exports.sendSignupRequestOTP = async (req, res, next) => {
+  try {
+    const targetRequest = await AdminSignupRequest.findById(req.params.id);
+    if (!targetRequest) return next(new AppError('Signup request not found', 404));
+
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    
+    // Generate OTP using existing fraudDetectionService
+    const { otp, signedToken } = await fraudDetectionService.generateOTP(req.user.email, ip);
+
+    // Send email to approving admin
+    try {
+      await sendEmail({
+        to: req.user.email,
+        subject: '🔒 Admin Authorization Code',
+        html: `
+          <div style="font-family: sans-serif; max-width: 500px; margin: auto; padding: 24px; border: 1px solid #e4e4e7; border-radius: 12px; color: #18181b;">
+            <h2 style="color: #ef4444; margin-top: 0;">Admin Approval Verification</h2>
+            <p>You are attempting to approve a new administrator signup request: <strong>${targetRequest.email}</strong>.</p>
+            <p>Please use the following dynamic verification code to complete this secure action:</p>
+            <div style="background: #f4f4f5; padding: 20px; border-radius: 8px; text-align: center; margin: 25px 0;">
+              <b style="font-size: 32px; letter-spacing: 5px; color: #18181b;">${otp}</b>
+            </div>
+            <p style="color: #71717a; font-size: 13px;">This security code will expire in 5 minutes. If you did not initiate this request, please contact system security immediately.</p>
+          </div>
+        `
+      });
+    } catch (err) {
+      logger.error('Admin signup request OTP email failed:', err);
+      return next(new AppError('Failed to send verification email. Try again.', 500));
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Security authorization code sent to your email.',
+      otpToken: signedToken
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Approve a pending admin signup request
+ */
+exports.approveSignupRequest = async (req, res, next) => {
+  try {
+    const { otpCode, otpToken } = req.body;
+    if (!otpCode || !otpToken) {
+      return next(new AppError('OTP code and token are required.', 400));
+    }
+
+    // Verify OTP using existing fraudDetectionService
+    const isOtpValid = await fraudDetectionService.verifyOTP(otpToken, otpCode);
+    if (!isOtpValid) {
+      return next(new AppError('Invalid or expired security code.', 401));
+    }
+
+    const signupRequest = await AdminSignupRequest.findById(req.params.id);
+    if (!signupRequest) {
+      return next(new AppError('Signup request not found or expired.', 404));
+    }
+
+    // Double-check email in User DB
+    const existing = await User.findOne({ email: signupRequest.email });
+    if (existing) {
+      await AdminSignupRequest.findByIdAndDelete(req.params.id);
+      return next(new AppError('A user with this email is already registered.', 400));
+    }
+
+    // Create Admin User
+    const newAdmin = await User.create({
+      name: signupRequest.name,
+      email: signupRequest.email,
+      password: signupRequest.password,
+      role: 'admin',
+      isEmailVerified: true
+    });
+
+    // The pre-save hook on User will auto-generate newAdmin.adminAccessKey!
+    // Let's delete the request
+    await AdminSignupRequest.findByIdAndDelete(req.params.id);
+
+    // Send email to newly approved admin
+    try {
+      await sendEmail({
+        to: newAdmin.email,
+        subject: '🎉 Admin Enrollment Approved',
+        html: `
+          <div style="font-family: sans-serif; max-width: 500px; margin: auto; padding: 24px; border: 1px solid #e4e4e7; border-radius: 12px; color: #18181b;">
+            <h2 style="color: #25D366; margin-top: 0;">Enrollment Approved!</h2>
+            <p>Hi ${newAdmin.name},</p>
+            <p>Your request to join the platform as a **System Administrator** has been approved.</p>
+            <p>Your unique administrative credential details are below. Keep this key completely secure:</p>
+            <div style="background: #f4f4f5; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 18px; text-align: center; margin: 20px 0; border: 1px dashed #25D366; color: #18181b; font-weight: bold;">
+              Access Key: ${newAdmin.adminAccessKey}
+            </div>
+            <p>You can now log in at the admin portal using your registered email and password.</p>
+            <p style="color: #71717a; font-size: 13px; margin-top: 24px;">WhatsAgent Platform Security Team</p>
+          </div>
+        `
+      });
+    } catch (err) {
+      logger.error('Error sending admin welcome email:', err);
+    }
+
+    // Log activity
+    await exports.logActivity(req, 'approve_signup', `Approved admin signup request for ${signupRequest.email} and assigned key ${newAdmin.adminAccessKey}`);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Admin signup request approved successfully.',
+      data: {
+        admin: {
+          id: newAdmin._id,
+          name: newAdmin.name,
+          email: newAdmin.email,
+          adminAccessKey: newAdmin.adminAccessKey
+        }
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Reject a pending admin signup request
+ */
+exports.rejectSignupRequest = async (req, res, next) => {
+  try {
+    const signupRequest = await AdminSignupRequest.findById(req.params.id);
+    if (!signupRequest) {
+      return next(new AppError('Signup request not found', 404));
+    }
+
+    await AdminSignupRequest.findByIdAndDelete(req.params.id);
+
+    // Send email to newly rejected admin
+    try {
+      await sendEmail({
+        to: signupRequest.email,
+        subject: 'Admin Enrollment Denied',
+        html: `
+          <div style="font-family: sans-serif; max-width: 500px; margin: auto; padding: 24px; border: 1px solid #e4e4e7; border-radius: 12px; color: #18181b;">
+            <h2 style="color: #ef4444; margin-top: 0;">Enrollment Request Denied</h2>
+            <p>Hi ${signupRequest.name},</p>
+            <p>Your request to enroll as a System Administrator has been reviewed and declined by existing administrators.</p>
+            <p>If you believe this is in error, please contact your systems management team.</p>
+            <p style="color: #71717a; font-size: 13px; margin-top: 24px;">WhatsAgent Platform Security Team</p>
+          </div>
+        `
+      });
+    } catch (err) {
+      logger.error('Error sending admin rejection email:', err);
+    }
+
+    // Log activity
+    await exports.logActivity(req, 'reject_signup', `Rejected admin signup request for ${signupRequest.email}`);
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Admin signup request rejected and deleted successfully.'
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get all admin audit activities (logs)
+ */
+exports.getAdminActivities = async (req, res, next) => {
+  try {
+    const { search, action, page = 1, limit = 50 } = req.query;
+    const query = {};
+
+    if (search) {
+      query.$or = [
+        { adminEmail: { $regex: search, $options: 'i' } },
+        { adminAccessKey: { $regex: search, $options: 'i' } },
+        { details: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    if (action) {
+      query.action = action;
+    }
+
+    const skip = (page - 1) * limit;
+    const [activities, total] = await Promise.all([
+      AdminActivity.find(query).sort({ timestamp: -1 }).skip(skip).limit(Number(limit)),
+      AdminActivity.countDocuments(query)
+    ]);
+
+    res.status(200).json({
+      status: 'success',
+      total,
+      page: Number(page),
+      pages: Math.ceil(total / limit),
+      data: { activities }
+    });
+  } catch (err) {
     next(err);
   }
 };

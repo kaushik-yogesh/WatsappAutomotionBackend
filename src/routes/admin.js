@@ -30,6 +30,15 @@ router.delete('/orphan-media', adminController.deleteMedia);
 router.get('/deletion-requests', adminController.getDeletionRequests);
 router.post('/users/:id/cancel-deletion', adminController.cancelDeletionRequest);
 
+// Admin Signup Requests management
+router.get('/signup-requests', adminController.getSignupRequests);
+router.post('/signup-requests/:id/send-otp', adminController.sendSignupRequestOTP);
+router.post('/signup-requests/:id/approve', adminController.approveSignupRequest);
+router.post('/signup-requests/:id/reject', adminController.rejectSignupRequest);
+
+// Administrative Activity Logs (Audit logs)
+router.get('/activities', adminController.getAdminActivities);
+
 // Plan Management
 router.get('/plans', adminController.getAllPlans);
 router.post('/plans', adminController.createPlan);

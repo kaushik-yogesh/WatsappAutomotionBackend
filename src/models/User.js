@@ -98,6 +98,11 @@ const userSchema = new mongoose.Schema({
   },
   loginAttempts: { type: Number, default: 0 },
   lockUntil: Date,
+  adminAccessKey: {
+    type: String,
+    unique: true,
+    sparse: true,
+  },
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -109,6 +114,10 @@ userSchema.index({ 'subscription.plan': 1 });
 
 // Hash password before save
 userSchema.pre('save', async function (next) {
+  if (this.role === 'admin' && !this.adminAccessKey) {
+    this.adminAccessKey = `ADM-${crypto.randomBytes(2).toString('hex').toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+  }
+
   if (!this.isModified('password')) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();
