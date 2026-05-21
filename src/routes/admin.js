@@ -36,4 +36,9 @@ router.post('/plans', adminController.createPlan);
 router.patch('/plans/:id', adminController.updatePlan);
 router.delete('/plans/:id', adminController.deletePlan);
 
+// Payments Management
+router.get('/payments', adminController.getAllPayments);
+router.patch('/payments/:id/status', adminController.updatePaymentStatus);
+router.post('/payments/:id/refund', adminController.refundPayment);
+
 module.exports = router;

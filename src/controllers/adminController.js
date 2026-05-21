@@ -743,3 +743,270 @@ exports.deletePlan = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * Get all payment history with advanced filters, pagination, and summary statistics
+ */
+exports.getAllPayments = async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const { plan, status, search, startDate, endDate } = req.query;
+
+    const query = {};
+
+    // 1. Filter by Plan
+    if (plan && plan !== 'all') {
+      query.plan = plan;
+    }
+
+    // 2. Filter by Status
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    // 3. Filter by Date range
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        query.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
+    }
+
+    // 4. Filter by Search Query
+    if (search) {
+      const Payment = require('../models/Payment');
+      const mongoose = require('mongoose');
+
+      // We can search by Payment ID, Order ID directly, OR search users by name/email
+      const matchingUsers = await User.find({
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } }
+        ]
+      }).select('_id');
+
+      const userIds = matchingUsers.map(u => u._id);
+
+      const orConditions = [
+        { razorpayPaymentId: { $regex: search, $options: 'i' } },
+        { razorpayOrderId: { $regex: search, $options: 'i' } },
+        { razorpaySubscriptionId: { $regex: search, $options: 'i' } }
+      ];
+
+      if (userIds.length > 0) {
+        orConditions.push({ user: { $in: userIds } });
+      }
+
+      if (mongoose.isValidObjectId(search)) {
+        orConditions.push({ _id: search });
+        orConditions.push({ user: search });
+      }
+
+      query.$or = orConditions;
+    }
+
+    const Payment = require('../models/Payment');
+    
+    // Fetch payments
+    const payments = await Payment.find(query)
+      .populate('user', 'name email role subscription')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const total = await Payment.countDocuments(query);
+
+    // Calculate aggregated statistics (based on matching filter for total earnings, etc.)
+    const allMatchingPayments = await Payment.find(query).select('status amount').lean();
+    
+    let totalEarnings = 0; // in Paise
+    let successCount = 0;
+    let failedCount = 0;
+    let refundedCount = 0;
+    let pendingCount = 0;
+
+    allMatchingPayments.forEach(p => {
+      if (p.status === 'captured') {
+        totalEarnings += p.amount;
+        successCount++;
+      } else if (p.status === 'failed') {
+        failedCount++;
+      } else if (p.status === 'refunded') {
+        refundedCount++;
+      } else if (p.status === 'created' || p.status === 'authorized') {
+        pendingCount++;
+      }
+    });
+
+    res.status(200).json({
+      status: 'success',
+      results: payments.length,
+      total,
+      data: {
+        payments,
+        stats: {
+          totalEarnings: totalEarnings / 100, // in Rupees
+          totalTransactions: allMatchingPayments.length,
+          successCount,
+          failedCount,
+          refundedCount,
+          pendingCount,
+          successRate: allMatchingPayments.length > 0 
+            ? Math.round((successCount / allMatchingPayments.length) * 100) 
+            : 0
+        }
+      }
+    });
+  } catch (err) {
+    logger.error('Error fetching payments:', err);
+    next(err);
+  }
+};
+
+/**
+ * Manually update payment status (Captured/Failed/Refunded) with admin override
+ */
+exports.updatePaymentStatus = async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    if (!['created', 'authorized', 'captured', 'failed', 'refunded'].includes(status)) {
+      return next(new AppError('Invalid payment status provided', 400));
+    }
+
+    const Payment = require('../models/Payment');
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) {
+      return next(new AppError('Payment not found', 404));
+    }
+
+    const oldStatus = payment.status;
+    payment.status = status;
+    await payment.save();
+
+    // If changing status to 'captured' and it wasn't captured before, activate user's subscription
+    if (status === 'captured' && oldStatus !== 'captured') {
+      const Plan = require('../models/Plan');
+      const planInfo = await Plan.findOne({ code: payment.plan });
+      if (planInfo) {
+        const now = new Date();
+        const periodEnd = new Date(now);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+        const targetUser = await User.findById(payment.user);
+        if (targetUser) {
+          targetUser.subscription.plan = payment.plan;
+          targetUser.subscription.status = 'active';
+          targetUser.subscription.currentPeriodStart = now;
+          targetUser.subscription.currentPeriodEnd = periodEnd;
+          targetUser.subscription.messageLimit = planInfo.messageLimit;
+          targetUser.subscription.agentLimit = planInfo.agentLimit;
+          targetUser.subscription.credits = planInfo.credits;
+          targetUser.subscription.totalCredits = planInfo.credits;
+          await targetUser.save({ validateBeforeSave: false });
+
+          // Log transaction
+          await creditHelper.logTransaction({
+            userId: targetUser._id,
+            type: 'addition',
+            amount: planInfo.credits,
+            description: `Manual Activation: Activated ${planInfo.name} tier plan by Administrator override`,
+            metadata: { plan: payment.plan, paymentId: payment._id, adminId: req.user._id },
+          });
+        }
+      }
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Payment status updated successfully',
+      data: { payment }
+    });
+  } catch (err) {
+    logger.error('Error updating payment status:', err);
+    next(err);
+  }
+};
+
+/**
+ * Simulate or trigger administrative payment refund and revoke active subscription
+ */
+exports.refundPayment = async (req, res, next) => {
+  try {
+    const Payment = require('../models/Payment');
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) {
+      return next(new AppError('Payment not found', 404));
+    }
+
+    if (payment.status === 'refunded') {
+      return next(new AppError('Payment has already been refunded', 400));
+    }
+
+    payment.status = 'refunded';
+    if (!payment.metadata) payment.metadata = {};
+    payment.metadata.refundedAt = new Date();
+    payment.metadata.refundedBy = req.user._id.toString();
+    
+    // Save metadata explicitly
+    payment.markModified('metadata');
+    await payment.save();
+
+    // Revert user's subscription/credits if they match the refunded plan
+    const targetUser = await User.findById(payment.user);
+    if (targetUser && targetUser.subscription.plan === payment.plan) {
+      const oldCredits = targetUser.subscription.credits || 0;
+      
+      // Degrade plan to free and deduct the plan credits
+      const Plan = require('../models/Plan');
+      const planInfo = await Plan.findOne({ code: payment.plan });
+      
+      targetUser.subscription.plan = 'free';
+      targetUser.subscription.status = 'cancelled';
+      targetUser.subscription.messageLimit = 100;
+      targetUser.subscription.agentLimit = 1;
+      
+      const creditsToDeduct = planInfo ? planInfo.credits : 0;
+      targetUser.subscription.credits = Math.max(0, targetUser.subscription.credits - creditsToDeduct);
+      await targetUser.save({ validateBeforeSave: false });
+
+      // Log credit transaction
+      await creditHelper.logTransaction({
+        userId: targetUser._id,
+        type: 'deduction',
+        amount: Math.min(oldCredits, creditsToDeduct),
+        description: `Plan Revoked (Refunded): Deducted ${creditsToDeduct} credits due to administrative refund`,
+        metadata: { paymentId: payment._id, adminId: req.user._id },
+      });
+      
+      // Send notification email
+      try {
+        const { sendEmail, emailTemplates } = require('../services/emailService');
+        await sendEmail({
+          to: targetUser.email,
+          subject: 'Payment Refund Confirmation',
+          html: `<p>Hi ${targetUser.name},</p><p>We have processed a refund for your payment (Plan: ${payment.plan.toUpperCase()}) of ₹${payment.amount / 100}. Your subscription has been reverted to the Free plan. Please let us know if you have any questions.</p><p>Best regards,<br/>The Admin Team</p>`
+        });
+      } catch (e) {
+        logger.error('Error sending refund email:', e);
+      }
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Payment refunded and subscription successfully revoked.',
+      data: { payment }
+    });
+  } catch (err) {
+    logger.error('Error refunding payment:', err);
+    next(err);
+  }
+};
