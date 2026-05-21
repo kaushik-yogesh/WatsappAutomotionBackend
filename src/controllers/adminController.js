@@ -227,22 +227,52 @@ exports.getUserDetails = async (req, res, next) => {
     if (!user) return next(new AppError('User not found', 404));
     
     const Payment = require('../models/Payment');
+    const FacebookAccount = require('../models/FacebookAccount');
+    const LinkedInAccount = require('../models/LinkedInAccount');
+    const YoutubeAccount = require('../models/YoutubeAccount');
+    const CreditTransaction = require('../models/CreditTransaction');
+    const FraudEvent = require('../models/FraudEvent');
 
-    const [whatsapp, telegram, instagram, agents, payments] = await Promise.all([
+    const [
+      whatsapp,
+      telegram,
+      instagram,
+      facebook,
+      linkedin,
+      youtube,
+      agents,
+      payments,
+      creditTransactions,
+      fraudEvents
+    ] = await Promise.all([
       WhatsappAccount.find({ user: user._id }),
       TelegramAccount.find({ user: user._id }),
       InstagramAccount.find({ user: user._id }),
+      FacebookAccount.find({ user: user._id }),
+      LinkedInAccount.find({ user: user._id }),
+      YoutubeAccount.find({ user: user._id }),
       Agent.find({ user: user._id }),
-      Payment.find({ user: user._id }).sort({ createdAt: -1 }).limit(10)
+      Payment.find({ user: user._id }).sort({ createdAt: -1 }),
+      CreditTransaction.find({ user: user._id }).sort({ createdAt: -1 }),
+      FraudEvent.find({ userId: user._id }).sort({ timestamp: -1 })
     ]);
 
     res.status(200).json({
       status: 'success',
       data: {
         user,
-        accounts: { whatsapp, telegram, instagram },
+        accounts: {
+          whatsapp,
+          telegram,
+          instagram,
+          facebook,
+          linkedin,
+          youtube
+        },
         agents,
-        payments
+        payments,
+        creditTransactions,
+        fraudEvents
       }
     });
   } catch (err) {
