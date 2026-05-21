@@ -190,6 +190,25 @@ exports.evaluateAllFlags = async (req, res, next) => {
 };
 
 /**
+ * Get all beta testers (Admin Only)
+ */
+exports.getBetaTesters = async (req, res, next) => {
+  try {
+    const betaTesters = await User.find({ isBetaTester: true })
+      .select('name email role isBetaTester subscription')
+      .sort({ name: 1 });
+
+    res.status(200).json({
+      status: 'success',
+      results: betaTesters.length,
+      data: { betaTesters }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * Set isBetaTester status on a user (Admin Only)
  */
 exports.updateUserBetaStatus = async (req, res, next) => {

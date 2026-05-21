@@ -13,6 +13,9 @@ router.get('/evaluate', featureFlagController.evaluateAllFlags);
 // 2. Admin Endpoints: Full Management Suite (Restricted to admins)
 router.use(restrictTo('admin'));
 
+// Get all beta testers
+router.get('/beta-testers', featureFlagController.getBetaTesters);
+
 router.route('/')
   .get(featureFlagController.getAllFlags)
   .post(featureFlagController.createFlag);
