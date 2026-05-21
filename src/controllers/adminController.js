@@ -1127,7 +1127,8 @@ exports.sendSignupRequestOTP = async (req, res, next) => {
     res.status(200).json({
       status: 'success',
       message: 'Security authorization code sent to your email.',
-      otpToken: signedToken
+      otpToken: signedToken,
+      data: { otpToken: signedToken }
     });
   } catch (err) {
     next(err);
