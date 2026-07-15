@@ -3,7 +3,7 @@ const router = express.Router();
 const dealController = require('../controllers/dealController');
 const { protect } = require('../middleware/auth');
 const { requireOrganization } = require('../middleware/organizationMiddleware');
-const { requirePermission } = require('../middleware/permissions');
+const { requireRole } = require('../middleware/permissions');
 const { validateBody, schemas } = require('../middleware/validation');
 
 // Use validation schema if available, else omit
@@ -11,11 +11,11 @@ router.use(protect);
 router.use(requireOrganization);
 
 router.route('/')
-  .get(requirePermission('contacts:read'), dealController.getDeals)
-  .post(requirePermission('contacts:write'), dealController.createDeal);
+  .get(requireRole('viewer'), dealController.getDeals)
+  .post(requireRole('editor'), dealController.createDeal);
 
 router.route('/:id')
-  .patch(requirePermission('contacts:write'), dealController.updateDeal)
-  .delete(requirePermission('contacts:delete'), dealController.deleteDeal);
+  .patch(requireRole('editor'), dealController.updateDeal)
+  .delete(requireRole('admin'), dealController.deleteDeal);
 
 module.exports = router;
