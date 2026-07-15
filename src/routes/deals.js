@@ -2,13 +2,13 @@ const express = require('express');
 const router = express.Router();
 const dealController = require('../controllers/dealController');
 const { protect } = require('../middleware/auth');
-const { requireTenant } = require('../middleware/organizationMiddleware');
+const { requireOrganization } = require('../middleware/organizationMiddleware');
 const { requirePermission } = require('../middleware/permissions');
 const { validateBody, schemas } = require('../middleware/validation');
 
 // Use validation schema if available, else omit
 router.use(protect);
-router.use(requireTenant);
+router.use(requireOrganization);
 
 router.route('/')
   .get(requirePermission('contacts:read'), dealController.getDeals)
