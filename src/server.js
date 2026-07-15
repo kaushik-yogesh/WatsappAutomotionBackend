@@ -86,8 +86,12 @@ const corsOptions = {
       return callback(null, true);
     }
     
-    const isAllowed = allowedOrigins.some(ao => ao && ao === origin) || 
-                      (process.env.NODE_ENV !== 'production' && origin && origin.endsWith('.vercel.app'));
+    const normalizedOrigin = origin ? origin.replace(/\/$/, '') : origin;
+    
+    const isAllowed = allowedOrigins.some(ao => {
+      if (!ao) return false;
+      return ao.replace(/\/$/, '') === normalizedOrigin;
+    }) || (process.env.NODE_ENV !== 'production' && normalizedOrigin && normalizedOrigin.endsWith('.vercel.app'));
 
     if (isAllowed) {
       callback(null, true);
