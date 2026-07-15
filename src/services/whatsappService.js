@@ -271,6 +271,16 @@ class WhatsAppService {
     }
   }
 
+  async getMessageTemplates(wabaId) {
+    try {
+      const response = await this.client.get(`/${wabaId}/message_templates`);
+      return response.data;
+    } catch (err) {
+      logger.error('WhatsApp getMessageTemplates error:', err.response?.data || err.message);
+      throw new AppError('Failed to fetch message templates from Meta.', 502);
+    }
+  }
+
   static async getSystemUserToken(appId, appSecret) {
     try {
       const axios = require('axios');
