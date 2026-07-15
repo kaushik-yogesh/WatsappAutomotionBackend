@@ -34,6 +34,7 @@ const adminRoutes = require('./routes/admin');
 const fraudAdminRoutes = require('./routes/fraudAdmin');
 const featureFlagsRoutes = require('./routes/featureFlags');
 const organizationRoutes = require('./routes/organizationRoutes');
+const ecommerceRoutes = require('./routes/ecommerceRoutes');
 
 const contactRoutes = require('./routes/contacts');
 const contactGroupRoutes = require('./routes/contactGroups');
@@ -50,6 +51,7 @@ const sessionRoutes = require('./routes/sessions');
 const materialRoutes = require('./routes/materials');
 const courseRoutes = require('./routes/courses');
 const batchRoutes = require('./routes/batches');
+const dealsRoutes = require('./routes/deals');
 
 const { checkMaintenance } = require('./middleware/maintenance');
 const { healthMonitor } = require('./middleware/healthMonitor');
@@ -255,6 +257,12 @@ app.use('/api/sessions', sessionRoutes);
 app.use('/api/materials', materialRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/batches', batchRoutes);
+app.use('/api/deals', dealsRoutes);
+
+app.use('/api/webhooks/telegram', telegramWebhookRoutes);
+
+// Ecommerce Webhooks (public for external services)
+app.use('/api/webhooks/ecommerce', ecommerceRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────
 app.all('*', (req, res, next) => {
