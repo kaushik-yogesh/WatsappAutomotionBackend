@@ -72,36 +72,9 @@ app.use(helmet({
 }));
 
 const corsOptions = {
-  origin: (origin, callback) => {
-    const allowedOrigins = [
-      process.env.FRONTEND_URL,
-      process.env.ADDITIONAL_FRONTEND_URL,
-      process.env.ADDITIONAL_FRONTEND_URL_2,
-      'http://localhost:3000',
-      'https://automation.poojatrendhub.com'
-    ];
-    
-    // Only allow undefined origin in development or for specific allowed origins
-    if (!origin && process.env.NODE_ENV !== 'production') {
-      return callback(null, true);
-    }
-    
-    const normalizedOrigin = origin ? origin.replace(/\/$/, '') : origin;
-    
-    const isAllowed = allowedOrigins.some(ao => {
-      if (!ao) return false;
-      return ao.replace(/\/$/, '') === normalizedOrigin;
-    }) || (process.env.NODE_ENV !== 'production' && normalizedOrigin && normalizedOrigin.endsWith('.vercel.app'));
-
-    if (isAllowed) {
-      callback(null, true);
-    } else {
-      logger.warn(`CORS blocked for origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: true,
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Organization-Id'],
 };
 
