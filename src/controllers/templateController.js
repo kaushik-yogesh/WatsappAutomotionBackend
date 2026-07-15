@@ -20,8 +20,22 @@ exports.syncTemplatesFromMeta = catchAsync(async (req, res, next) => {
 });
 
 exports.createTemplate = catchAsync(async (req, res, next) => {
-  const template = await Template.create({ ...req.body, organization: req.user.organization });
-  // Call Meta API to create template here
+  const { name, category, language, components } = req.body;
+  
+  if (!['MARKETING', 'UTILITY', 'AUTHENTICATION'].includes(category)) {
+    return next(new AppError('Invalid category. Must be MARKETING, UTILITY, or AUTHENTICATION', 400));
+  }
+
+  const template = await Template.create({ 
+    organization: req.user.organization,
+    name,
+    category,
+    language,
+    components,
+    status: 'PENDING'
+  });
+  
+  // In a real app: Call Meta API to create template here
   res.status(201).json({ status: 'success', data: { template } });
 });
 
