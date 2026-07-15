@@ -75,6 +75,8 @@ const corsOptions = {
   origin: (origin, callback) => {
     const allowedOrigins = [
       process.env.FRONTEND_URL,
+      process.env.ADDITIONAL_FRONTEND_URL,
+      process.env.ADDITIONAL_FRONTEND_URL_2,
       'http://localhost:3000',
       'https://automation.poojatrendhub.com'
     ];
