@@ -249,6 +249,7 @@ app.use('/api/materials', materialRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/batches', batchRoutes);
 app.use('/api/deals', dealsRoutes);
+app.use('/api/integrations', require('./routes/integrations'));
 
 app.use('/api/webhooks/telegram', telegramWebhookRoutes);
 
