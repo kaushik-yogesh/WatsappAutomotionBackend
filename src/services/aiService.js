@@ -101,6 +101,31 @@ class AIService {
     return msg.content[0].text;
   }
 
+  static async callOpenRouter(modelName, systemPrompt, effectiveContext, userMessageText, temperature) {
+    const { OpenAI } = require('openai');
+    const openai = new OpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: process.env.OPENROUTER_API_KEY,
+      defaultHeaders: {
+        "HTTP-Referer": process.env.FRONTEND_URL || "http://localhost:3000",
+        "X-Title": "WhatsApp SaaS",
+      }
+    });
+    
+    const messages = [{ role: 'system', content: systemPrompt }];
+    effectiveContext.forEach(msg => {
+      messages.push({ role: msg.role === 'assistant' ? 'assistant' : 'user', content: msg.content });
+    });
+    messages.push({ role: 'user', content: userMessageText });
+
+    const completion = await openai.chat.completions.create({
+      model: modelName,
+      messages: messages,
+      temperature: temperature || 0.7,
+    });
+    return completion.choices[0].message.content;
+  }
+
   // WA-011: Redis Caching & WA-009: Memory Summarization
   static async generate(agent, contextMessages, userMessageText, platform, wantsVoice = false) {
     try {
@@ -127,14 +152,24 @@ class AIService {
           responseText = await this.callOpenAI(modelName, systemPrompt, effectiveContext, userMessageText, agent.temperature);
         } else if (modelName.startsWith('claude')) {
           responseText = await this.callAnthropic(modelName, systemPrompt, effectiveContext, userMessageText, agent.temperature);
+        } else if (modelName.includes('/')) {
+          responseText = await this.callOpenRouter(modelName, systemPrompt, effectiveContext, userMessageText, agent.temperature);
         } else {
           responseText = await this.callGemini(modelName, systemPrompt, effectiveContext, userMessageText, agent.temperature);
         }
       } catch (providerError) {
         logger.error(`Primary AI Provider Error (${modelName}):`, providerError.message);
         logger.info('Falling back to default Gemini model (gemini-1.5-flash)...');
-        // Fallback to default Gemini if primary fails
-        responseText = await this.callGemini('gemini-1.5-flash', systemPrompt, effectiveContext, userMessageText, agent.temperature);
+        
+        try {
+          // Fallback to default Gemini if primary fails
+          responseText = await this.callGemini('gemini-1.5-flash', systemPrompt, effectiveContext, userMessageText, agent.temperature);
+        } catch (geminiError) {
+          logger.error(`Fallback Gemini Error:`, geminiError.message);
+          logger.info('Ultimate Fallback to OpenRouter (meta-llama/llama-3-8b-instruct:free)...');
+          // Ultimate fallback to a reliable free openrouter model
+          responseText = await this.callOpenRouter('meta-llama/llama-3-8b-instruct:free', systemPrompt, effectiveContext, userMessageText, agent.temperature);
+        }
       }
 
       // Estimate tokens (roughly 4 chars per token)
