@@ -158,11 +158,19 @@ exports.processWebhookPayload = async (payload) => {
       logger.info(`Incoming message from ${from} on phone ${phoneNumberId}`);
 
       // 0. Deduplicate webhook using Redis atomic lock (prevents double replies on Meta retries)
-      const redis = require('../config/redis').redis;
-      const dedupKey = `wa_dedup:${messageId}`;
-      const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+      let isDuplicate = false;
+      try {
+        const redis = require('../config/redis').redis;
+        const dedupKey = `wa_dedup:${messageId}`;
+        const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+        if (!isNew) isDuplicate = true;
+      } catch (redisErr) {
+        logger.warn(`Redis deduplication failed, falling back to MongoDB: ${redisErr.message}`);
+        const existingMessage = await Conversation.findOne({ 'messages.waMessageId': messageId });
+        if (existingMessage) isDuplicate = true;
+      }
       
-      if (!isNew) {
+      if (isDuplicate) {
         logger.info(`[DEDUPLICATION] Message ${messageId} is already processing/processed. Skipping.`);
         return;
       }

@@ -89,11 +89,18 @@ async function handleFacebookMessage(event, fbAccount, agent) {
   if (!senderId || !messageId || !text) return;
 
   // Deduplicate using Redis atomic lock
-  const redis = require('../config/redis').redis;
-  const dedupKey = `fb_dedup:${messageId}`;
-  const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+  let isDuplicate = false;
+  try {
+    const redis = require('../config/redis').redis;
+    const dedupKey = `fb_dedup:${messageId}`;
+    const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+    if (!isNew) isDuplicate = true;
+  } catch (redisErr) {
+    logger.warn(`Redis deduplication failed for FB: ${redisErr.message}`);
+    // Will naturally fallback to checking the DB later in the queue processing
+  }
   
-  if (!isNew) {
+  if (isDuplicate) {
     logger.info(`Facebook message ${messageId} already processing/processed. Skipping duplicate webhook.`);
     return;
   }

@@ -168,11 +168,19 @@ exports.receiveMessage = async (req, res) => {
         }
 
         // Deduplicate using Redis atomic lock to prevent double processing
-        const redis = require('../config/redis').redis;
-        const dedupKey = `tg_dedup:${messageId}`;
-        const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+        let isDuplicate = false;
+        try {
+          const redis = require('../config/redis').redis;
+          const dedupKey = `tg_dedup:${messageId}`;
+          const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+          if (!isNew) isDuplicate = true;
+        } catch (redisErr) {
+          logger.warn(`Redis deduplication failed for TG: ${redisErr.message}`);
+          const recentMsgs = await conversation.getRecentMessages();
+          isDuplicate = recentMsgs?.some(m => m.waMessageId === messageId.toString());
+        }
         
-        if (!isNew) {
+        if (isDuplicate) {
           logger.info(`Message ${messageId} from Telegram user ${fromId} already processing/processed. Skipping duplicate webhook.`);
           return;
         }

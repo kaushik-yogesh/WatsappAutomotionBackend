@@ -182,11 +182,19 @@ async function handleInstagramDM(event, igAccount, agent) {
       }
 
       // Deduplicate using Redis atomic lock to prevent double replies on Meta retries
-      const redis = require('../config/redis').redis;
-      const dedupKey = `ig_dm_dedup:${messageId}`;
-      const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+      let isDuplicate = false;
+      try {
+        const redis = require('../config/redis').redis;
+        const dedupKey = `ig_dm_dedup:${messageId}`;
+        const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+        if (!isNew) isDuplicate = true;
+      } catch (redisErr) {
+        logger.warn(`Redis deduplication failed, falling back to MongoDB: ${redisErr.message}`);
+        const recentMsgs = await conversation.getRecentMessages();
+        isDuplicate = recentMsgs?.some(m => m.waMessageId === messageId);
+      }
       
-      if (!isNew) {
+      if (isDuplicate) {
         logger.info(`Message ${messageId} from Instagram user ${senderId} already processing/processed. Skipping duplicate webhook.`);
         return;
       }
@@ -460,11 +468,18 @@ async function handleInstagramComment(commentData, igAccount, agent) {
         }
 
         // 1.5 Deduplicate comments
-        const redis = require('../config/redis').redis;
-        const dedupKey = `ig_comment_dedup:${commentId}`;
-        const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+        let isDuplicate = false;
+        try {
+          const redis = require('../config/redis').redis;
+          const dedupKey = `ig_comment_dedup:${commentId}`;
+          const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+          if (!isNew) isDuplicate = true;
+        } catch (redisErr) {
+          logger.warn(`Redis deduplication failed for IG comment: ${redisErr.message}`);
+          // Fallback: Proceed without deduplication since we don't save comments in DB
+        }
         
-        if (!isNew) {
+        if (isDuplicate) {
           logger.info(`Comment ${commentId} from user ${commenterId} already processing/processed. Skipping duplicate webhook.`);
           return;
         }
