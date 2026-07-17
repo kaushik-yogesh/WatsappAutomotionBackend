@@ -7,7 +7,6 @@ const SocialPostJob = require('../models/SocialPostJob');
 const Agent = require('../models/Agent');
 const SystemSetting = require('../models/SystemSetting');
 const Payment = require('../models/Payment');
-const WebhookHealth = require('../models/WebhookHealth');
 const ContactMessage = require('../models/ContactMessage');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
