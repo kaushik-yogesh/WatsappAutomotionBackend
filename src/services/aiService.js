@@ -166,9 +166,9 @@ class AIService {
           responseText = await this.callGemini('gemini-1.5-flash', systemPrompt, effectiveContext, userMessageText, agent.temperature);
         } catch (geminiError) {
           logger.error(`Fallback Gemini Error:`, geminiError.message);
-          logger.info('Ultimate Fallback to OpenRouter (mistralai/mistral-7b-instruct:free)...');
+          logger.info('Ultimate Fallback to OpenRouter (meta-llama/llama-3.3-70b-instruct:free)...');
           // Ultimate fallback to a reliable free openrouter model
-          responseText = await this.callOpenRouter('mistralai/mistral-7b-instruct:free', systemPrompt, effectiveContext, userMessageText, agent.temperature);
+          responseText = await this.callOpenRouter('meta-llama/llama-3.3-70b-instruct:free', systemPrompt, effectiveContext, userMessageText, agent.temperature);
         }
       }
 
