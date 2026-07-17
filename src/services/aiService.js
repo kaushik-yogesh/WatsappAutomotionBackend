@@ -166,9 +166,30 @@ class AIService {
           responseText = await this.callGemini('gemini-1.5-flash', systemPrompt, effectiveContext, userMessageText, agent.temperature);
         } catch (geminiError) {
           logger.error(`Fallback Gemini Error:`, geminiError.message);
-          logger.info('Ultimate Fallback to OpenRouter (meta-llama/llama-3.3-70b-instruct:free)...');
-          // Ultimate fallback to a reliable free openrouter model
-          responseText = await this.callOpenRouter('meta-llama/llama-3.3-70b-instruct:free', systemPrompt, effectiveContext, userMessageText, agent.temperature);
+          
+          // God-Tier Ultimate Fallback Loop
+          const openRouterFallbacks = [
+            'meta-llama/llama-3.3-70b-instruct:free',
+            'google/gemma-4-26b-a4b-it:free',
+            'nousresearch/hermes-3-llama-3.1-405b:free'
+          ];
+          
+          let success = false;
+          let lastErr = null;
+          
+          for (const fallbackModel of openRouterFallbacks) {
+            try {
+              logger.info(`Attempting Ultimate Fallback to OpenRouter (${fallbackModel})...`);
+              responseText = await this.callOpenRouter(fallbackModel, systemPrompt, effectiveContext, userMessageText, agent.temperature);
+              success = true;
+              break;
+            } catch (openRouterErr) {
+              logger.warn(`OpenRouter fallback ${fallbackModel} failed: ${openRouterErr.message}`);
+              lastErr = openRouterErr;
+            }
+          }
+          
+          if (!success && lastErr) throw lastErr;
         }
       }
 
