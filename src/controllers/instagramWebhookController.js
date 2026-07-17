@@ -181,11 +181,13 @@ async function handleInstagramDM(event, igAccount, agent) {
         });
       }
 
-      // Deduplicate by messageId to prevent multiple replies for the same message/edit
-      const recentMsgs = await conversation.getRecentMessages();
-      const isDuplicate = recentMsgs?.some(m => m.waMessageId === messageId);
-      if (isDuplicate) {
-        logger.info(`Message ${messageId} from Instagram user ${senderId} already processed. Skipping duplicate webhook.`);
+      // Deduplicate using Redis atomic lock to prevent double replies on Meta retries
+      const redis = require('../config/redis').redis;
+      const dedupKey = `ig_dm_dedup:${messageId}`;
+      const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+      
+      if (!isNew) {
+        logger.info(`Message ${messageId} from Instagram user ${senderId} already processing/processed. Skipping duplicate webhook.`);
         return;
       }
 
@@ -454,6 +456,16 @@ async function handleInstagramComment(commentData, igAccount, agent) {
 
         if (!enabled) {
           logger.info(`[COMMENT SKIP]: Bot is disabled in settings for account: ${igAccount.igUsername || igAccount.igAccountId}`);
+          return;
+        }
+
+        // 1.5 Deduplicate comments
+        const redis = require('../config/redis').redis;
+        const dedupKey = `ig_comment_dedup:${commentId}`;
+        const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+        
+        if (!isNew) {
+          logger.info(`Comment ${commentId} from user ${commenterId} already processing/processed. Skipping duplicate webhook.`);
           return;
         }
 

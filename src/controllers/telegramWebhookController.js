@@ -167,11 +167,13 @@ exports.receiveMessage = async (req, res) => {
           });
         }
 
-        // Deduplicate by messageId
-        const recentMsgs = await conversation.getRecentMessages();
-      const isDuplicate = recentMsgs?.some(m => m.waMessageId === messageId.toString());
-        if (isDuplicate) {
-          logger.info(`Message ${messageId} from Telegram user ${fromId} already processed. Skipping duplicate webhook.`);
+        // Deduplicate using Redis atomic lock to prevent double processing
+        const redis = require('../config/redis').redis;
+        const dedupKey = `tg_dedup:${messageId}`;
+        const isNew = await redis.set(dedupKey, '1', 'EX', 3600, 'NX');
+        
+        if (!isNew) {
+          logger.info(`Message ${messageId} from Telegram user ${fromId} already processing/processed. Skipping duplicate webhook.`);
           return;
         }
 
