@@ -187,7 +187,7 @@ async function handleFacebookMessage(event, fbAccount, agent) {
         timestamp: new Date(),
       });
 
-      const contextMessages = await conversation.getRecentMessages(20)
+      const contextMessages = (await conversation.getRecentMessages(20))
         .filter((m) => m.role !== 'system')
         .slice(-(agent.contextWindow * 2))
         .map((m) => ({ role: m.role, content: m.content }));

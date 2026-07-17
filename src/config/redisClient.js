@@ -46,11 +46,18 @@ let clientConfig = {
 
 if (isValidUrl) {
   clientConfig.url = REDIS_URL;
+  if (REDIS_URL.startsWith('rediss://') || REDIS_URL.includes('upstash')) {
+    clientConfig.socket.tls = true;
+    clientConfig.socket.rejectUnauthorized = false;
+  }
 } else if (process.env.REDIS_HOST) {
   clientConfig.socket.host = process.env.REDIS_HOST;
   clientConfig.socket.port = parseInt(process.env.REDIS_PORT || 6379);
   if (process.env.REDIS_PASSWORD) clientConfig.password = process.env.REDIS_PASSWORD;
-  if (useTls) clientConfig.socket.tls = true;
+  if (useTls) {
+    clientConfig.socket.tls = true;
+    clientConfig.socket.rejectUnauthorized = false;
+  }
 } else {
   clientConfig.url = 'redis://127.0.0.1:6379';
 }
@@ -63,7 +70,7 @@ redisClient.on('error', (err) => {
   if (err.code === 'ECONNREFUSED') {
     logger.error(`Redis connection refused. Ensure Redis is running and REDIS_URL is correctly set.`);
   } else {
-    logger.error('Redis Client Error:', err.message);
+    logger.error('Redis Client Error:', err);
   }
 });
 

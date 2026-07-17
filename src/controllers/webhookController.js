@@ -449,8 +449,7 @@ exports.processWebhookPayload = async (payload) => {
       }
 
       // 8a. Get recent context window
-      const contextMessages = await conversation
-        .getRecentMessages(20)
+      const contextMessages = (await conversation.getRecentMessages(20))
         .filter((m) => m.role !== 'system')
         .slice(-(agent.contextWindow * 2))
         .map((m) => ({ role: m.role, content: m.content }));
