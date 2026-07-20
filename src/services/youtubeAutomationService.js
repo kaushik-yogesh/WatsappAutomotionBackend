@@ -100,15 +100,13 @@ class YoutubeAutomationService {
       logger.info(`[YouTube Automation] New comment from ${authorName}: ${commentText.substring(0, 30)}...`);
 
       // Generate AI Reply
-      const aiResponse = await AIService.generateOpenRouter({
-        messages: [
-          { role: 'system', content: automation.aiPrompt },
-          { role: 'user', content: `Comment from ${authorName}: ${commentText}` }
-        ],
-        maxTokens: 150
-      });
-
-      const replyText = aiResponse.content;
+      const replyText = await AIService.callGemini(
+        'gemini-1.5-flash',
+        automation.aiPrompt,
+        [], // no context messages
+        `Comment from ${authorName}: ${commentText}`,
+        0.7 // temperature
+      );
 
       if (automation.automationMode === 'auto') {
         // Auto-reply
