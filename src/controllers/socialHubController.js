@@ -969,85 +969,83 @@ exports.getBestTimeToPost = async (req, res, next) => {
     res.status(200).json({ status: 'success', data: result });
   } catch (err) { next(err); }
 };
-/ /  
- - - -  
- L i n k e d I n  
- M a n u a l  
- A u t o - R e p l y  
- E n d p o i n t s  
- - - -  
- exports.getLinkedInStats = async (req, res, next) => { try { res.status(200).json({ status: 'success', data: { views: 0, comments: 0 } }); } catch (err) { next(err); } };
- 
- e x p o r t s . t r i g g e r L i n k e d I n W o r k e r   =   a s y n c   ( r e q ,   r e s ,   n e x t )   = >   {  
-     t r y   {  
-         c o n s t   L i n k e d i n A u t o m a t i o n S e r v i c e   =   r e q u i r e ( ' . . / s e r v i c e s / l i n k e d i n A u t o m a t i o n S e r v i c e ' ) ;  
-         L i n k e d i n A u t o m a t i o n S e r v i c e . r u n A u t o m a t i o n ( ) . c a t c h ( e r r   = >   l o g g e r . e r r o r ( ' L i n k e d I n   W o r k e r   E r r o r :   '   +   e r r . m e s s a g e ) ) ;  
-         r e s . s t a t u s ( 2 0 0 ) . j s o n ( {   s t a t u s :   ' s u c c e s s ' ,   m e s s a g e :   ' W o r k e r   t r i g g e r e d   s u c c e s s f u l l y '   } ) ;  
-     }   c a t c h   ( e r r )   {  
-         n e x t ( e r r ) ;  
-     }  
- } ;  
-  
- e x p o r t s . a u t o R e p l y L i n k e d I n P o s t   =   a s y n c   ( r e q ,   r e s ,   n e x t )   = >   {  
-     t r y   {  
-         c o n s t   {   a c c o u n t I d ,   m e d i a I d   }   =   r e q . b o d y ;  
-         i f   ( ! a c c o u n t I d   | |   ! m e d i a I d )   r e t u r n   n e x t ( n e w   A p p E r r o r ( ' a c c o u n t I d   a n d   m e d i a I d   r e q u i r e d ' ,   4 0 0 ) ) ;  
-          
-         c o n s t   a c c o u n t   =   a w a i t   L i n k e d I n A c c o u n t . f i n d O n e ( {   _ i d :   a c c o u n t I d ,   o r g a n i z a t i o n :   r e q . o r g a n i z a t i o n . _ i d   } ) . s e l e c t ( ' + a c c e s s T o k e n ' ) ;  
-         i f   ( ! a c c o u n t )   r e t u r n   n e x t ( n e w   A p p E r r o r ( ' A c c o u n t   n o t   f o u n d ' ,   4 0 4 ) ) ;  
-  
-         c o n s t   A g e n t   =   r e q u i r e ( ' . . / m o d e l s / A g e n t ' ) ;  
-         c o n s t   a g e n t   =   a w a i t   A g e n t . f i n d O n e ( {   l i n k e d i n A c c o u n t :   a c c o u n t I d ,   p l a t f o r m s :   ' l i n k e d i n ' ,   o r g a n i z a t i o n :   r e q . o r g a n i z a t i o n . _ i d   } ) ;  
-         i f   ( ! a g e n t )   r e t u r n   n e x t ( n e w   A p p E r r o r ( ' P l e a s e   s e t u p   a n   A I   A g e n t   f o r   t h i s   L i n k e d I n   a c c o u n t   f i r s t ' ,   4 0 0 ) ) ;  
-  
-         c o n s t   l i S e r v i c e   =   n e w   L i n k e d I n S e r v i c e ( a c c o u n t . a c c e s s T o k e n ,   a c c o u n t . l i n k e d i n I d ) ;  
-         c o n s t   c o m m e n t s R e s p o n s e   =   a w a i t   l i S e r v i c e . g e t P o s t C o m m e n t s ( m e d i a I d ) ;  
-         c o n s t   c o m m e n t s   =   c o m m e n t s R e s p o n s e . e l e m e n t s   | |   [ ] ;  
-          
-         c o n s t   A I S e r v i c e   =   r e q u i r e ( ' . . / s e r v i c e s / a i S e r v i c e ' ) ;  
-          
-         c o n s t   p r o c e s s A u t o R e p l y   =   a s y n c   ( )   = >   {  
-             l e t   c o u n t   =   0 ;  
-             i f   ( ! a g e n t . r e p l i e d L i n k e d i n C o m m e n t s )   a g e n t . r e p l i e d L i n k e d i n C o m m e n t s   =   [ ] ;  
-              
-             f o r   ( c o n s t   c o m m e n t   o f   c o m m e n t s )   {  
-                   c o n s t   c o m m e n t I d   =   c o m m e n t . i d ;  
-                   c o n s t   c o m m e n t T e x t   =   c o m m e n t . m e s s a g e ? . t e x t ;  
-                   c o n s t   a u t h o r U r n   =   c o m m e n t . a c t o r ;  
-  
-                   i f   ( a g e n t . r e p l i e d L i n k e d i n C o m m e n t s . i n c l u d e s ( c o m m e n t I d ) )   c o n t i n u e ;  
-                   i f   ( a u t h o r U r n . i n c l u d e s ( a c c o u n t . l i n k e d i n I d ) )   c o n t i n u e ;  
-                   i f   ( ! c o m m e n t T e x t )   c o n t i n u e ;  
-  
-                   t r y   {  
-                       c o n s t   a i R e s p o n s e   =   a w a i t   A I S e r v i c e . g e n e r a t e (  
-                           a g e n t ,  
-                           [ ] ,  
-                           ` C o m m e n t :   $ { c o m m e n t T e x t } ` ,  
-                           ' l i n k e d i n '  
-                       ) ;  
-                        
-                       c o n s t   r e p l y T e x t   =   a i R e s p o n s e . c o n t e n t ;  
-                        
-                       i f   ( r e p l y T e x t   & &   ! r e p l y T e x t . i n c l u d e s ( ' e x p e r i e n c i n g   s o m e   t e c h n i c a l   d i f f i c u l t i e s ' ) )   {  
-                           a w a i t   l i S e r v i c e . r e p l y T o C o m m e n t ( c o m m e n t I d ,   r e p l y T e x t ) ;  
-                           a g e n t . r e p l i e d L i n k e d i n C o m m e n t s . p u s h ( c o m m e n t I d ) ;  
-                           c o u n t + + ;  
-                       }  
-                   }   c a t c h ( e )   {  
-                       l o g g e r . e r r o r ( ` E r r o r   a u t o - r e p l y i n g   t o   L i n k e d I n   c o m m e n t   $ { c o m m e n t I d } :   $ { e . m e s s a g e } ` ) ;  
-                   }  
-             }  
-             i f   ( c o u n t   >   0 )   {  
-                 a w a i t   a g e n t . s a v e ( ) ;  
-             }  
-         } ;  
-          
-         p r o c e s s A u t o R e p l y ( ) . c a t c h ( e r r   = >   l o g g e r . e r r o r ( ' L i n k e d I n   A u t o R e p l y   E r r o r :   '   +   e r r . m e s s a g e ) ) ;  
-  
-         r e s . s t a t u s ( 2 0 0 ) . j s o n ( {   s t a t u s :   ' s u c c e s s ' ,   m e s s a g e :   ' A u t o   r e p l y   p r o c e s s   s t a r t e d '   } ) ;  
-     }   c a t c h   ( e r r )   {  
-         n e x t ( e r r ) ;  
-     }  
- } ;  
- 
+exports.getLinkedInStats = async (req, res, next) => {
+  try {
+    res.status(200).json({ status: 'success', data: { views: 0, comments: 0 } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.triggerLinkedInWorker = async (req, res, next) => {
+  try {
+    const LinkedinAutomationService = require('../services/linkedinAutomationService');
+    LinkedinAutomationService.runAutomation().catch(err => logger.error('LinkedIn Worker Error: ' + err.message));
+    res.status(200).json({ status: 'success', message: 'Worker triggered successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.autoReplyLinkedInPost = async (req, res, next) => {
+  try {
+    const { accountId, mediaId } = req.body;
+    if (!accountId || !mediaId) return next(new AppError('accountId and mediaId required', 400));
+    
+    const account = await LinkedInAccount.findOne({ _id: accountId, organization: req.organization._id }).select('+accessToken');
+    if (!account) return next(new AppError('Account not found', 404));
+
+    const Agent = require('../models/Agent');
+    const agent = await Agent.findOne({ linkedinAccount: accountId, platforms: 'linkedin', organization: req.organization._id });
+    if (!agent) return next(new AppError('Please setup an AI Agent for this LinkedIn account first', 400));
+
+    const liService = new LinkedInService(account.accessToken, account.linkedinId);
+    const commentsResponse = await liService.getPostComments(mediaId);
+    const comments = commentsResponse.elements || [];
+    
+    const AIService = require('../services/aiService');
+    
+    const processAutoReply = async () => {
+      let count = 0;
+      if (!agent.repliedLinkedinComments) agent.repliedLinkedinComments = [];
+      
+      for (const comment of comments) {
+         const commentId = comment.id;
+         const commentText = comment.message?.text;
+         const authorUrn = comment.actor;
+
+         if (agent.repliedLinkedinComments.includes(commentId)) continue;
+         if (authorUrn.includes(account.linkedinId)) continue;
+         if (!commentText) continue;
+
+         try {
+           const aiResponse = await AIService.generate(
+             agent,
+             [],
+             `Comment: ${commentText}`,
+             'linkedin'
+           );
+           
+           const replyText = aiResponse.content;
+           
+           if (replyText && !replyText.includes('experiencing some technical difficulties')) {
+             await liService.replyToComment(commentId, replyText);
+             agent.repliedLinkedinComments.push(commentId);
+             count++;
+           }
+         } catch(e) {
+           logger.error(`Error auto-replying to LinkedIn comment ${commentId}: ${e.message}`);
+         }
+      }
+      if (count > 0) {
+        await agent.save();
+      }
+    };
+    
+    processAutoReply().catch(err => logger.error('LinkedIn AutoReply Error: ' + err.message));
+
+    res.status(200).json({ status: 'success', message: 'Auto reply process started' });
+  } catch (err) {
+    next(err);
+  }
+};
