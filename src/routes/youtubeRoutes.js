@@ -26,5 +26,7 @@ router.get('/manual/accounts', youtubeController.getAllAccounts);
 router.get('/manual/:id/media', youtubeController.getMedia);
 router.get('/manual/:id/media/:mediaId/comments', youtubeController.getMediaComments);
 router.post('/manual/:id/comments/:commentId/reply', youtubeController.replyToComment);
+router.post('/manual/trigger-worker', youtubeController.triggerWorker);
+router.post('/manual/auto-reply-post', youtubeController.autoReplyPost);
 
 module.exports = router;
