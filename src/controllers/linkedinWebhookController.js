@@ -1,13 +1,18 @@
 const logger = require('../utils/logger');
 const linkedinAutomationService = require('../services/linkedinAutomationService');
 
+const crypto = require('crypto');
+
 exports.verifyWebhook = (req, res) => {
-  // LinkedIn sends a challenge query parameter that needs to be returned
+  // LinkedIn sends a challenge query parameter that needs to be returned with HMAC signature
   const challengeCode = req.query.challengeCode;
   
   if (challengeCode) {
+    const secret = process.env.LINKEDIN_CLIENT_SECRET || '';
+    const challengeResponse = crypto.createHmac('sha256', secret).update(challengeCode).digest('hex');
+    
     logger.info('LinkedIn webhook verification successful');
-    res.status(200).send({ challengeCode });
+    res.status(200).json({ challengeCode, challengeResponse });
   } else {
     // Some versions use 'challenge'
     const challenge = req.query.challenge;
