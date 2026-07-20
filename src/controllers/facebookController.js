@@ -203,3 +203,11 @@ exports.replyToComment = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.getStats = async (req, res, next) => {
+  try {
+    res.status(200).json({ status: 'success', data: { views: 0, comments: 0 } });
+  } catch (err) {
+    next(err);
+  }
+};
