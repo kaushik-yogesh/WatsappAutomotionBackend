@@ -211,3 +211,24 @@ exports.getStats = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.triggerWorker = async (req, res, next) => {
+  try {
+    // Placeholder for triggering background sync for Facebook
+    res.status(200).json({ status: 'success', message: 'Facebook worker triggered successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.autoReplyPost = async (req, res, next) => {
+  try {
+    const { accountId, mediaId } = req.body;
+    if (!accountId || !mediaId) return res.status(400).json({status: 'fail', message: 'accountId and mediaId required'});
+    
+    // Placeholder for Facebook AI auto-reply
+    res.status(200).json({ status: 'success', message: 'Facebook AI Auto-Reply process started' });
+  } catch (err) {
+    next(err);
+  }
+};
