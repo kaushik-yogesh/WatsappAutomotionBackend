@@ -100,13 +100,18 @@ class YoutubeAutomationService {
       logger.info(`[YouTube Automation] New comment from ${authorName}: ${commentText.substring(0, 30)}...`);
 
       // Generate AI Reply
-      const replyText = await AIService.callGemini(
-        'gemini-1.5-flash',
-        automation.aiPrompt,
+      const aiResponse = await AIService.generate(
+        { _id: 'youtube_auto', systemPrompt: automation.aiPrompt, model: 'gemini-1.5-flash', temperature: 0.7 },
         [], // no context messages
         `Comment from ${authorName}: ${commentText}`,
-        0.7 // temperature
+        'youtube'
       );
+      const replyText = aiResponse.content;
+
+      if (!replyText || replyText.includes("experiencing some technical difficulties")) {
+         logger.warn(`[YouTube Automation] AI failed to generate reply for comment: ${commentId}`);
+         continue;
+      }
 
       if (automation.automationMode === 'auto') {
         // Auto-reply

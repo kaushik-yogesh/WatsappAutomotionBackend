@@ -154,6 +154,31 @@ exports.replyToComment = async (req, res, next) => {
   }
 };
 
+exports.getStats = async (req, res, next) => {
+  try {
+    const account = await YoutubeAccount.findOne({ _id: req.params.id, organization: req.organization._id }).select("+accessToken +refreshToken");
+    if (!account) return next(new AppError('YouTube account not found', 404));
+
+    const ytProvider = new YoutubeProvider(account.accessToken, account.refreshToken, account.tokenExpiry, account.channelId);
+    if (new Date(account.tokenExpiry) < new Date(Date.now() + 5 * 60000)) {
+      await ytProvider.refreshYouTubeTokenForAccount(account);
+    }
+    
+    const channelDetails = await ytProvider.fetchChannelDetails();
+    const stats = channelDetails.statistics || { viewCount: 0, commentCount: 0 };
+    
+    res.status(200).json({ 
+      status: 'success', 
+      data: { 
+        views: stats.viewCount, 
+        comments: stats.commentCount 
+      } 
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.triggerWorker = async (req, res, next) => {
   try {
     const YoutubeAutomationService = require('../services/youtubeAutomationService');
@@ -196,15 +221,16 @@ exports.autoReplyPost = async (req, res, next) => {
          if (topComment.snippet.authorChannelId?.value === account.channelId) continue;
 
          try {
-           const replyText = await AIService.callGemini(
-             'gemini-1.5-flash',
-             automation.aiPrompt,
+           const aiResponse = await AIService.generate(
+             { _id: 'youtube_auto', systemPrompt: automation.aiPrompt, model: 'gemini-1.5-flash', temperature: 0.7 },
              [],
              `Comment from ${authorName}: ${commentText}`,
-             0.7
+             'youtube'
            );
            
-           if (replyText) {
+           const replyText = aiResponse.content;
+           
+           if (replyText && !replyText.includes("experiencing some technical difficulties")) {
              const success = await ytProvider.replyToCommentThread(commentId, replyText);
              if (success) {
                automation.repliedCommentIds.push(commentId);
