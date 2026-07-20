@@ -27,6 +27,13 @@ const agentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'FacebookAccount',
   },
+  youtubeAccount: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'YoutubeAccount', // Assuming YoutubeAccount model exists
+  },
+  platforms: [{
+    type: String
+  }],
   platform: {
     type: String,
     enum: ['whatsapp', 'telegram', 'both', 'instagram', 'facebook', 'all'],
