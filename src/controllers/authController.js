@@ -95,12 +95,19 @@ exports.getCsrfToken = (req, res) => {
 
 exports.register = async (req, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, ref, partnerCode } = req.body;
 
     const existing = await User.findOne({ email });
     if (existing) return next(new AppError('Email already registered. Please log in.', 400));
 
-    const user = await User.create({ name, email, password });
+    let referredByPartner = null;
+    const codeToSearch = ref || partnerCode;
+    if (codeToSearch) {
+      const partner = await User.findOne({ partnerCode: codeToSearch.toUpperCase() });
+      if (partner) referredByPartner = partner._id;
+    }
+
+    const user = await User.create({ name, email, password, referredByPartner });
 
     // Create default organization
     const Organization = require('../models/Organization');
