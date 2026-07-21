@@ -11,12 +11,10 @@ router.get('/dashboard', partnerController.getPartnerDashboard);
 router.get('/payouts', partnerController.getPartnerPayouts);
 
 // Admin routes (Accessible only by admin / superadmin)
-router.use('/admin', restrictTo('admin', 'superadmin'));
-
-router.get('/admin/partners', partnerController.getAllPartners);
-router.post('/admin/assign-role', partnerController.assignPartnerRole);
-router.get('/admin/settings', partnerController.getAdminSettings);
-router.patch('/admin/settings', partnerController.updateAdminSettings);
-router.post('/admin/process-payout', partnerController.processPayout);
+router.get('/admin/partners', restrictTo('admin', 'superadmin'), partnerController.getAllPartners);
+router.post('/admin/assign-role', restrictTo('admin', 'superadmin'), partnerController.assignPartnerRole);
+router.get('/admin/settings', restrictTo('admin', 'superadmin'), partnerController.getAdminSettings);
+router.patch('/admin/settings', restrictTo('admin', 'superadmin'), partnerController.updateAdminSettings);
+router.post('/admin/process-payout', restrictTo('admin', 'superadmin'), partnerController.processPayout);
 
 module.exports = router;
