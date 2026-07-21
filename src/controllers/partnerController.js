@@ -14,6 +14,18 @@ const getSystemSettings = async () => {
   return settings;
 };
 
+// Helper to generate 100% unique partner code
+const generateUniquePartnerCode = async () => {
+  let isUnique = false;
+  let code = '';
+  while (!isUnique) {
+    code = 'SP-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+    const existing = await User.exists({ partnerCode: code });
+    if (!existing) isUnique = true;
+  }
+  return code;
+};
+
 // --- SALES PARTNER ENDPOINTS ---
 
 // GET /api/partner/dashboard
@@ -22,7 +34,7 @@ exports.getPartnerDashboard = catchAsync(async (req, res, next) => {
 
   // Ensure partner code exists
   if (!user.partnerCode) {
-    user.partnerCode = 'SP-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+    user.partnerCode = await generateUniquePartnerCode();
     await user.save({ validateBeforeSave: false });
   }
 
@@ -128,7 +140,7 @@ exports.assignPartnerRole = catchAsync(async (req, res, next) => {
   if (customCommissionRate !== undefined) user.partnerCommissionRate = customCommissionRate;
 
   if (user.role === 'sales_partner' && !user.partnerCode) {
-    user.partnerCode = 'SP-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+    user.partnerCode = await generateUniquePartnerCode();
   }
 
   await user.save({ validateBeforeSave: false });
