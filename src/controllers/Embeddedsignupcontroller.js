@@ -9,14 +9,20 @@ const META_API_BASE = `https://graph.facebook.com/${process.env.META_API_VERSION
 // Step 1: Exchange short-lived code for long-lived System User token & fetch connected WABAs / phone numbers
 exports.embeddedSignupCallback = async (req, res, next) => {
     try {
-        const { code, redirectUri } = req.body;
+        const { code, redirectUri, appId: frontendAppId } = req.body;
         if (!code) return next(new AppError('Authorization code is required.', 400));
 
         const appId = (process.env.META_APP_ID || '').trim().replace(/^["']|["']$/g, '');
         const appSecret = (process.env.META_APP_SECRET || '').trim().replace(/^["']|["']$/g, '');
 
         if (!appId || !appSecret) {
-          return next(new AppError('META_APP_ID or META_APP_SECRET is missing in backend environment variables.', 500));
+          return next(new AppError('META_APP_ID or META_APP_SECRET is missing in backend environment variables on Render.', 500));
+        }
+
+        // Diagnostic Check: Verify Frontend App ID matches Backend App ID
+        if (frontendAppId && frontendAppId !== appId) {
+          logger.error(`Meta App ID Mismatch: Frontend sending "${frontendAppId}", Backend has "${appId}"`);
+          return next(new AppError(`App ID Mismatch! Vercel is sending App ID (${frontendAppId}), but Render has META_APP_ID (${appId}). Please set REACT_APP_META_APP_ID on Vercel and META_APP_ID on Render to the exact same Meta App ID.`, 400));
         }
 
         const redirect_uri = redirectUri || "https://watsapp-automotion.vercel.app/callback";
