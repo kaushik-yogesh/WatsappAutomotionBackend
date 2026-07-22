@@ -1,7 +1,7 @@
 /**
  * Pre-Designed High-Converting WhatsApp Marketing Templates
  * Formatted for 1-Click Submission to Meta Graph API
- * Note: Meta prohibits emojis and formatting characters in TEXT headers.
+ * Note: Meta prohibits emojis, variables, and formatting characters in TEXT headers & BUTTON text.
  */
 
 module.exports = [
@@ -31,7 +31,7 @@ module.exports = [
         buttons: [
           {
             type: 'QUICK_REPLY',
-            text: 'Checkout Now 🚀'
+            text: 'Checkout Now'
           },
           {
             type: 'QUICK_REPLY',
@@ -67,7 +67,7 @@ module.exports = [
         buttons: [
           {
             type: 'QUICK_REPLY',
-            text: 'Shop Sale Deals 🛒'
+            text: 'Shop Sale Deals'
           }
         ]
       }
@@ -99,7 +99,7 @@ module.exports = [
         buttons: [
           {
             type: 'QUICK_REPLY',
-            text: 'Claim Offer 🎁'
+            text: 'Claim Offer'
           }
         ]
       }
@@ -167,7 +167,7 @@ module.exports = [
         buttons: [
           {
             type: 'QUICK_REPLY',
-            text: 'Unlock VIP Access 🔓'
+            text: 'Unlock VIP Access'
           }
         ]
       }
@@ -199,7 +199,7 @@ module.exports = [
         buttons: [
           {
             type: 'QUICK_REPLY',
-            text: 'Track Order 📍'
+            text: 'Track Order'
           }
         ]
       }
@@ -231,7 +231,7 @@ module.exports = [
         buttons: [
           {
             type: 'QUICK_REPLY',
-            text: 'Pay Now 💳'
+            text: 'Pay Now'
           }
         ]
       }

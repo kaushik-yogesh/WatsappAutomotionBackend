@@ -18,18 +18,34 @@ const getConnectedWAAccount = async (userId) => {
   return waAccount;
 };
 
-// Helper to sanitize components for Meta Graph API rules (HEADER text cannot contain emojis or formatting)
+// Helper to sanitize components for Meta Graph API rules (HEADER text & BUTTON text cannot contain emojis or formatting)
 const sanitizeMetaComponents = (components) => {
   if (!Array.isArray(components)) return [];
+  const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F191}-\u{1F251}]/gu;
+
   return components.map(c => {
     if (c.type === 'HEADER' && c.format === 'TEXT' && c.text) {
       const cleanHeader = c.text
-        .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F191}-\u{1F251}]/gu, '')
+        .replace(emojiRegex, '')
         .replace(/[*_~\n\r'"]/g, '')
         .trim();
       return {
         ...c,
         text: cleanHeader || 'Announcement'
+      };
+    }
+    if (c.type === 'BUTTONS' && Array.isArray(c.buttons)) {
+      return {
+        ...c,
+        buttons: c.buttons.map(b => ({
+          ...b,
+          text: b.text
+            ? b.text
+                .replace(emojiRegex, '')
+                .replace(/[*_~\n\r'"]/g, '')
+                .trim() || 'Action'
+            : 'Action'
+        }))
       };
     }
     return c;
