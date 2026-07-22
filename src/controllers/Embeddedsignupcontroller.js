@@ -6,7 +6,7 @@ const logger = require('../utils/logger');
 
 const META_API_BASE = `https://graph.facebook.com/${process.env.META_API_VERSION || 'v21.0'}`;
 
-// Step 1: Exchange short-lived code for long-lived System User token & fetch connected WABAs / phone numbers
+// Step 1: Exchange short-lived code for long-lived System User token & auto-connect WABAs / phone numbers
 exports.embeddedSignupCallback = async (req, res, next) => {
     try {
         const { code, redirectUri, appId: frontendAppId } = req.body;
@@ -131,9 +131,52 @@ exports.embeddedSignupCallback = async (req, res, next) => {
           }
         }
 
+        // Auto-save connected phone numbers directly to MongoDB
+        const orgId = req.organization?._id || req.user?.currentOrganization || req.user?.organization;
+        const savedAccounts = [];
+
+        for (const phone of phoneNumbers) {
+          try {
+            // Subscribe to WABA webhook on Meta
+            try {
+              await axios.post(
+                `${META_API_BASE}/${phone.wabaId}/subscribed_apps`,
+                {},
+                { params: { access_token: longLivedToken } }
+              );
+            } catch (subErr) {}
+
+            const account = await WhatsappAccount.findOneAndUpdate(
+              { phoneNumberId: phone.phoneNumberId },
+              {
+                user: req.user._id,
+                organization: orgId,
+                phoneNumberId: phone.phoneNumberId,
+                wabaId: phone.wabaId,
+                accessToken: encrypt(longLivedToken),
+                displayPhoneNumber: phone.displayPhoneNumber,
+                verifiedName: phone.verifiedName,
+                status: 'connected',
+                lastVerified: new Date(),
+                webhookVerified: true,
+                isActive: true,
+                errorMessage: undefined,
+              },
+              { upsert: true, new: true, setDefaultsOnInsert: true }
+            );
+
+            const accObj = account.toObject();
+            delete accObj.accessToken;
+            savedAccounts.push(accObj);
+          } catch (saveErr) {
+            logger.warn(`Auto-save error for phone ${phone.phoneNumberId}:`, saveErr.message);
+          }
+        }
+
         res.status(200).json({
             status: 'success',
-            data: { phoneNumbers, longLivedToken },
+            message: `Connected ${savedAccounts.length} WhatsApp phone number(s)!`,
+            data: { phoneNumbers, longLivedToken, accounts: savedAccounts },
         });
 
     } catch (err) {
