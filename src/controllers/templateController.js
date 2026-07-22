@@ -18,12 +18,16 @@ const getConnectedWAAccount = async (userId) => {
   return waAccount;
 };
 
-// Helper to sanitize components for Meta Graph API rules (HEADER text & BUTTON text cannot contain emojis or formatting)
+// Fallback sample values for Meta template variable verification
+const sampleVarValues = ['John', '20', 'SAVE20', 'Today', 'Sample', 'Order123', 'VIP', 'Product'];
+
+// Helper to sanitize components for Meta Graph API rules & attach required variable examples
 const sanitizeMetaComponents = (components) => {
   if (!Array.isArray(components)) return [];
   const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F191}-\u{1F251}]/gu;
 
   return components.map(c => {
+    // 1. Sanitize TEXT HEADER
     if (c.type === 'HEADER' && c.format === 'TEXT' && c.text) {
       const cleanHeader = c.text
         .replace(emojiRegex, '')
@@ -34,6 +38,27 @@ const sanitizeMetaComponents = (components) => {
         text: cleanHeader || 'Announcement'
       };
     }
+
+    // 2. Sanitize & attach Meta required example.body_text for variables
+    if (c.type === 'BODY' && c.text) {
+      const matches = c.text.match(/\{\{(\d+)\}\}/g) || [];
+      const varCount = matches.length;
+
+      const bodyComp = { ...c };
+
+      if (varCount > 0) {
+        const sampleRow = [];
+        for (let i = 0; i < varCount; i++) {
+          sampleRow.push(sampleVarValues[i] || `Sample${i + 1}`);
+        }
+        bodyComp.example = {
+          body_text: [sampleRow]
+        };
+      }
+      return bodyComp;
+    }
+
+    // 3. Sanitize BUTTONS text
     if (c.type === 'BUTTONS' && Array.isArray(c.buttons)) {
       return {
         ...c,
@@ -48,6 +73,7 @@ const sanitizeMetaComponents = (components) => {
         }))
       };
     }
+
     return c;
   });
 };
@@ -87,6 +113,7 @@ exports.syncTemplatesFromMeta = catchAsync(async (req, res, next) => {
         language: tpl.language,
         components: tpl.components,
         status: tpl.status,
+        rejectedReason: tpl.rejected_reason || tpl.reason || null,
         wabaId: waAccount.wabaId,
         metaTemplateId: tpl.id
       },
