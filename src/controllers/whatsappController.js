@@ -83,9 +83,39 @@ exports.connectAccount = async (req, res, next) => {
 // Get all connected accounts for user
 exports.getAccounts = async (req, res, next) => {
   try {
-    const accounts = await WhatsappAccount.find({ organization: req.organization._id, isActive: true })
+    const orgId = req.organization?._id;
+    const userId = req.user?._id;
+
+    // Find accounts associated with either active organization or logged in user
+    let accounts = await WhatsappAccount.find({
+      $or: [
+        { organization: orgId },
+        { user: userId }
+      ],
+      status: { $ne: 'disconnected' }
+    })
       .select('-accessToken')
       .lean();
+
+    // Auto-heal: Ensure all accounts for this user/org have isActive: true and organization set
+    const inactiveIds = accounts.filter(a => !a.isActive || a.status !== 'connected').map(a => a._id);
+    if (inactiveIds.length > 0) {
+      await WhatsappAccount.updateMany(
+        { _id: { $in: inactiveIds } },
+        { $set: { isActive: true, status: 'connected', organization: orgId } }
+      );
+
+      accounts = await WhatsappAccount.find({
+        $or: [
+          { organization: orgId },
+          { user: userId }
+        ],
+        status: { $ne: 'disconnected' }
+      })
+        .select('-accessToken')
+        .lean();
+    }
+
     res.status(200).json({ status: 'success', results: accounts.length, data: { accounts } });
   } catch (err) {
     next(err);
