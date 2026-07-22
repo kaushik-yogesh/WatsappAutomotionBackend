@@ -6,10 +6,7 @@ const logger = require('../utils/logger');
 
 const META_API_BASE = `https://graph.facebook.com/${process.env.META_API_VERSION || 'v21.0'}`;
 
-// Step 1: Exchange short-lived code for long-lived System User token
-// Called after user completes Facebook Embedded Signup flow
-
-
+// Step 1: Exchange short-lived code for long-lived System User token & fetch connected WABAs / phone numbers
 exports.embeddedSignupCallback = async (req, res, next) => {
     try {
         const { code, redirectUri } = req.body;
@@ -30,59 +27,95 @@ exports.embeddedSignupCallback = async (req, res, next) => {
         const shortLivedToken = tokenRes.data.access_token;
 
         // Exchange short-lived for long-lived token
-        const longLivedRes = await axios.get(`${META_API_BASE}/oauth/access_token`, {
-            params: {
-                grant_type: 'fb_exchange_token',
-                client_id: process.env.META_APP_ID,
-                client_secret: process.env.META_APP_SECRET,
-                fb_exchange_token: shortLivedToken,
-            },
-        });
-
-        const longLivedToken = longLivedRes.data.access_token;
-
-        // Step 1: Get businesses
-        const bizRes = await axios.get(`${META_API_BASE}/me/businesses`, {
-            params: {
-                access_token: longLivedToken,
-            },
-        });
+        let longLivedToken = shortLivedToken;
+        try {
+          const longLivedRes = await axios.get(`${META_API_BASE}/oauth/access_token`, {
+              params: {
+                  grant_type: 'fb_exchange_token',
+                  client_id: process.env.META_APP_ID,
+                  client_secret: process.env.META_APP_SECRET,
+                  fb_exchange_token: shortLivedToken,
+              },
+          });
+          if (longLivedRes.data?.access_token) {
+            longLivedToken = longLivedRes.data.access_token;
+          }
+        } catch (llErr) {
+          logger.warn('Long lived token exchange warning, using short lived token:', llErr.message);
+        }
 
         const phoneNumbers = [];
+        const seenPhoneIds = new Set();
+        const wabas = [];
 
-        // Step 2: Loop businesses → WABA → phone numbers
-        for (const biz of bizRes.data.data || []) {
-            // Get WABA list
-            const wabaRes = await axios.get(
-                `${META_API_BASE}/${biz.id}/owned_whatsapp_business_accounts`,
-                {
-                    params: {
-                        access_token: longLivedToken,
-                    },
-                }
-            );
+        // 1. Fetch via GET /me/shared_whatsapp_business_accounts (Official Meta Embedded Signup Endpoint)
+        try {
+          const sharedRes = await axios.get(`${META_API_BASE}/me/shared_whatsapp_business_accounts`, {
+            params: { access_token: longLivedToken }
+          });
+          if (sharedRes.data?.data) {
+            wabas.push(...sharedRes.data.data);
+          }
+        } catch (e1) {
+          logger.warn('shared_whatsapp_business_accounts warning:', e1.response?.data?.error?.message || e1.message);
+        }
 
-            for (const waba of wabaRes.data.data || []) {
-                // Get phone numbers
-                const phoneRes = await axios.get(
-                    `${META_API_BASE}/${waba.id}/phone_numbers`,
-                    {
-                        params: {
-                            access_token: longLivedToken,
-                        },
-                    }
-                );
+        // 2. Fetch via GET /me/whatsapp_business_accounts
+        try {
+          const wabaRes = await axios.get(`${META_API_BASE}/me/whatsapp_business_accounts`, {
+            params: { access_token: longLivedToken }
+          });
+          if (wabaRes.data?.data) {
+            wabas.push(...wabaRes.data.data);
+          }
+        } catch (e2) {
+          logger.warn('whatsapp_business_accounts warning:', e2.response?.data?.error?.message || e2.message);
+        }
 
-                for (const phone of phoneRes.data.data || []) {
-                    phoneNumbers.push({
-                        phoneNumberId: phone.id,
-                        wabaId: waba.id,
-                        wabaName: waba.name,
-                        displayPhoneNumber: phone.display_phone_number,
-                        verifiedName: phone.verified_name,
-                    });
-                }
+        // 3. Fallback via GET /me/businesses (if business_management permission granted)
+        try {
+          const bizRes = await axios.get(`${META_API_BASE}/me/businesses`, {
+            params: { access_token: longLivedToken }
+          });
+          for (const biz of bizRes.data?.data || []) {
+            try {
+              const bizWabaRes = await axios.get(`${META_API_BASE}/${biz.id}/owned_whatsapp_business_accounts`, {
+                params: { access_token: longLivedToken }
+              });
+              if (bizWabaRes.data?.data) {
+                wabas.push(...bizWabaRes.data.data);
+              }
+            } catch (e) {}
+          }
+        } catch (e3) {
+          logger.warn('businesses fetch warning:', e3.response?.data?.error?.message || e3.message);
+        }
+
+        // Deduplicate WABAs by ID
+        const uniqueWabas = Array.from(new Map(wabas.map(w => [w.id, w])).values());
+
+        // Step 2: Fetch phone numbers for each WABA
+        for (const waba of uniqueWabas) {
+          try {
+            const phoneRes = await axios.get(`${META_API_BASE}/${waba.id}/phone_numbers`, {
+              params: { access_token: longLivedToken }
+            });
+
+            for (const phone of phoneRes.data?.data || []) {
+              if (!seenPhoneIds.has(phone.id)) {
+                seenPhoneIds.add(phone.id);
+                phoneNumbers.push({
+                  phoneNumberId: phone.id,
+                  wabaId: waba.id,
+                  wabaName: waba.name || 'WhatsApp Account',
+                  displayPhoneNumber: phone.display_phone_number || phone.phone_number || phone.id,
+                  verifiedName: phone.verified_name || phone.display_phone_number || 'WhatsApp Business',
+                });
+              }
             }
+          } catch (phoneErr) {
+            logger.warn(`Failed to fetch phone numbers for WABA ${waba.id}:`, phoneErr.response?.data?.error?.message || phoneErr.message);
+          }
         }
 
         res.status(200).json({
@@ -93,13 +126,10 @@ exports.embeddedSignupCallback = async (req, res, next) => {
     } catch (err) {
         const metaErr = err.response?.data?.error;
         logger.error('Embedded signup token exchange error:', metaErr || err.message);
-        const msg = metaErr?.message || 'Failed to complete WhatsApp signup. Please try again.';
-        next(new AppError(msg, 502));
+        const msg = metaErr?.message || err.message || 'Failed to complete WhatsApp signup. Please try again.';
+        next(new AppError(msg, 400));
     }
 };
-
-
-
 
 // Step 2: Save selected phone number after user picks from list
 exports.embeddedSignupSave = async (req, res, next) => {
@@ -143,7 +173,7 @@ exports.embeddedSignupSave = async (req, res, next) => {
             { phoneNumberId },
             {
                 user: req.user._id,
-                organization: req.organization._id,  // ← CRITICAL: was missing before
+                organization: req.organization._id,
                 phoneNumberId,
                 wabaId,
                 accessToken: encrypt(accessToken),
