@@ -1,6 +1,7 @@
 /**
  * Pre-Designed High-Converting WhatsApp Marketing Templates
  * Formatted for 1-Click Submission to Meta Graph API
+ * Note: Meta prohibits emojis and formatting characters in TEXT headers.
  */
 
 module.exports = [
@@ -15,7 +16,7 @@ module.exports = [
       {
         type: 'HEADER',
         format: 'TEXT',
-        text: 'Don\'t miss out on your order! 🛍️'
+        text: 'Dont miss out on your order'
       },
       {
         type: 'BODY',
@@ -51,7 +52,7 @@ module.exports = [
       {
         type: 'HEADER',
         format: 'TEXT',
-        text: '⚡ FLASH SALE IS LIVE!'
+        text: 'FLASH SALE IS LIVE'
       },
       {
         type: 'BODY',
@@ -83,7 +84,7 @@ module.exports = [
       {
         type: 'HEADER',
         format: 'TEXT',
-        text: 'Happy Celebrations! 🎆'
+        text: 'Happy Celebrations'
       },
       {
         type: 'BODY',
@@ -91,7 +92,7 @@ module.exports = [
       },
       {
         type: 'FOOTER',
-        text: 'Terms & conditions apply'
+        text: 'Terms and conditions apply'
       },
       {
         type: 'BUTTONS',
@@ -106,7 +107,7 @@ module.exports = [
   },
   {
     id: 'sys_appointment_reminder',
-    title: '📅 Appointment / Booking Confirmation',
+    title: '📅 Appointment Booking Confirmation',
     category: 'UTILITY',
     language: 'en_US',
     badge: 'Essential',
@@ -115,7 +116,7 @@ module.exports = [
       {
         type: 'HEADER',
         format: 'TEXT',
-        text: 'Appointment Confirmation 📌'
+        text: 'Appointment Confirmation'
       },
       {
         type: 'BODY',
@@ -151,7 +152,7 @@ module.exports = [
       {
         type: 'HEADER',
         format: 'TEXT',
-        text: 'Exclusive VIP Invitation 👑'
+        text: 'Exclusive VIP Invitation'
       },
       {
         type: 'BODY',
@@ -174,7 +175,7 @@ module.exports = [
   },
   {
     id: 'sys_order_dispatch',
-    title: '🚚 Order Dispatched & Tracking',
+    title: '🚚 Order Dispatched and Tracking',
     category: 'UTILITY',
     language: 'en_US',
     badge: 'Customer Care',
@@ -183,7 +184,7 @@ module.exports = [
       {
         type: 'HEADER',
         format: 'TEXT',
-        text: 'Your Order is on the Way! 📦'
+        text: 'Your Order is on the Way'
       },
       {
         type: 'BODY',
@@ -206,7 +207,7 @@ module.exports = [
   },
   {
     id: 'sys_payment_reminder',
-    title: '💳 Payment & Invoice Notice',
+    title: '💳 Payment and Invoice Notice',
     category: 'UTILITY',
     language: 'en_US',
     badge: 'Finance',
@@ -215,7 +216,7 @@ module.exports = [
       {
         type: 'HEADER',
         format: 'TEXT',
-        text: 'Payment Notice 📑'
+        text: 'Payment Notice'
       },
       {
         type: 'BODY',
@@ -223,7 +224,7 @@ module.exports = [
       },
       {
         type: 'FOOTER',
-        text: 'Accounts & Billing Team'
+        text: 'Accounts and Billing Team'
       },
       {
         type: 'BUTTONS',
@@ -238,7 +239,7 @@ module.exports = [
   },
   {
     id: 'sys_customer_review',
-    title: '💬 Customer Feedback & Rating',
+    title: '💬 Customer Feedback and Rating',
     category: 'MARKETING',
     language: 'en_US',
     badge: 'Feedback',
@@ -247,7 +248,7 @@ module.exports = [
       {
         type: 'HEADER',
         format: 'TEXT',
-        text: 'How was your experience? ⭐'
+        text: 'How was your experience'
       },
       {
         type: 'BODY',
@@ -262,7 +263,7 @@ module.exports = [
         buttons: [
           {
             type: 'QUICK_REPLY',
-            text: '⭐ Loved It!'
+            text: 'Loved It'
           },
           {
             type: 'QUICK_REPLY',

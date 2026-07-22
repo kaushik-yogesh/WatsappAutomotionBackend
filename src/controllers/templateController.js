@@ -18,6 +18,24 @@ const getConnectedWAAccount = async (userId) => {
   return waAccount;
 };
 
+// Helper to sanitize components for Meta Graph API rules (HEADER text cannot contain emojis or formatting)
+const sanitizeMetaComponents = (components) => {
+  if (!Array.isArray(components)) return [];
+  return components.map(c => {
+    if (c.type === 'HEADER' && c.format === 'TEXT' && c.text) {
+      const cleanHeader = c.text
+        .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F191}-\u{1F251}]/gu, '')
+        .replace(/[*_~\n\r'"]/g, '')
+        .trim();
+      return {
+        ...c,
+        text: cleanHeader || 'Announcement'
+      };
+    }
+    return c;
+  });
+};
+
 // GET /api/templates/system - Get pre-approved ready-to-use system template library
 exports.getSystemTemplates = catchAsync(async (req, res, next) => {
   res.status(200).json({
@@ -87,6 +105,8 @@ exports.createTemplate = catchAsync(async (req, res, next) => {
     return next(new AppError('Invalid category. Must be MARKETING, UTILITY, or AUTHENTICATION', 400));
   }
 
+  const cleanedComponents = sanitizeMetaComponents(components);
+
   const waAccount = await getConnectedWAAccount(req.user.id);
   const waService = new WhatsAppService(decrypt(waAccount.accessToken), waAccount.phoneNumberId);
 
@@ -94,7 +114,7 @@ exports.createTemplate = catchAsync(async (req, res, next) => {
     name: sanitizedName,
     category,
     language: language || 'en_US',
-    components
+    components: cleanedComponents
   };
 
   // Submit directly to Meta Graph API
@@ -110,7 +130,7 @@ exports.createTemplate = catchAsync(async (req, res, next) => {
       name: sanitizedName,
       category,
       language: metaPayload.language,
-      components,
+      components: cleanedComponents,
       status: metaResult.status || 'PENDING',
       wabaId: waAccount.wabaId,
       metaTemplateId: metaResult.id
@@ -138,6 +158,8 @@ exports.cloneSystemTemplate = catchAsync(async (req, res, next) => {
   const uniqueSuffix = Date.now().toString(36).slice(-4);
   const sanitizedName = `tpl_${baseName.toLowerCase().replace(/[^a-z0-9_]/g, '_')}_${uniqueSuffix}`.slice(0, 64);
 
+  const cleanedComponents = sanitizeMetaComponents(sysTpl.components);
+
   const waAccount = await getConnectedWAAccount(req.user.id);
   const waService = new WhatsAppService(decrypt(waAccount.accessToken), waAccount.phoneNumberId);
 
@@ -145,7 +167,7 @@ exports.cloneSystemTemplate = catchAsync(async (req, res, next) => {
     name: sanitizedName,
     category: sysTpl.category,
     language: sysTpl.language,
-    components: sysTpl.components
+    components: cleanedComponents
   };
 
   // Submit to Meta Graph API
@@ -158,7 +180,7 @@ exports.cloneSystemTemplate = catchAsync(async (req, res, next) => {
     name: sanitizedName,
     category: sysTpl.category,
     language: sysTpl.language,
-    components: sysTpl.components,
+    components: cleanedComponents,
     status: metaResult.status || 'PENDING',
     wabaId: waAccount.wabaId,
     metaTemplateId: metaResult.id
