@@ -118,7 +118,7 @@ exports.register = async (req, res, next) => {
       if (partner) referredByPartner = partner._id;
     }
 
-    const user = await User.create({ name, email, password, referredByPartner });
+    const user = await User.create({ name, email, password, role: 'user', referredByPartner });
 
     // Create default organization
     const Organization = require('../models/Organization');
