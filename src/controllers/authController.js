@@ -47,7 +47,8 @@ const sendTokens = (user, statusCode, res, req = null) => {
 
   res.status(statusCode).json({
     status: 'success',
-    data: { user },
+    token,
+    data: { user, token },
   });
 };
 
