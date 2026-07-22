@@ -38,8 +38,12 @@ const validateCsrf = (req, res, next) => {
     return next();
   }
 
-  // Skip webhooks since they use signature verification, not CSRF
-  if (req.originalUrl.includes('/webhook') || req.originalUrl.includes('/api/whatsapp/webhook')) {
+  // Skip webhooks and auth refresh-token endpoint (uses httpOnly refreshToken cookie)
+  if (
+    req.originalUrl.includes('/webhook') || 
+    req.originalUrl.includes('/api/whatsapp/webhook') ||
+    req.originalUrl.includes('/api/auth/refresh-token')
+  ) {
     return next();
   }
 
