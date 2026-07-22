@@ -12,13 +12,20 @@ exports.embeddedSignupCallback = async (req, res, next) => {
         const { code, redirectUri } = req.body;
         if (!code) return next(new AppError('Authorization code is required.', 400));
 
+        const appId = (process.env.META_APP_ID || '').trim().replace(/^["']|["']$/g, '');
+        const appSecret = (process.env.META_APP_SECRET || '').trim().replace(/^["']|["']$/g, '');
+
+        if (!appId || !appSecret) {
+          return next(new AppError('META_APP_ID or META_APP_SECRET is missing in backend environment variables.', 500));
+        }
+
         const redirect_uri = redirectUri || "https://watsapp-automotion.vercel.app/callback";
 
         // Exchange code for access token
         const tokenRes = await axios.get(`${META_API_BASE}/oauth/access_token`, {
             params: {
-                client_id: process.env.META_APP_ID,
-                client_secret: process.env.META_APP_SECRET,
+                client_id: appId,
+                client_secret: appSecret,
                 code,
                 redirect_uri
             },
@@ -32,8 +39,8 @@ exports.embeddedSignupCallback = async (req, res, next) => {
           const longLivedRes = await axios.get(`${META_API_BASE}/oauth/access_token`, {
               params: {
                   grant_type: 'fb_exchange_token',
-                  client_id: process.env.META_APP_ID,
-                  client_secret: process.env.META_APP_SECRET,
+                  client_id: appId,
+                  client_secret: appSecret,
                   fb_exchange_token: shortLivedToken,
               },
           });
