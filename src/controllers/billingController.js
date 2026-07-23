@@ -20,6 +20,46 @@ const getRazorpayInstance = () => {
   return new Razorpay({ key_id: keyId, key_secret: keySecret });
 };
 
+const processPartnerCommission = async (user, paymentAmountInRupees, planCode) => {
+  if (!user || !user.referredByPartner || paymentAmountInRupees <= 0) return;
+  try {
+    const SystemSettings = require('../models/SystemSettings');
+    const PartnerCommission = require('../models/PartnerCommission');
+
+    const partner = await User.findById(user.referredByPartner);
+    if (!partner) return;
+
+    // Check if commission for this specific plan payment was already recorded
+    const existingComm = await PartnerCommission.findOne({
+      partner: partner._id,
+      referredUser: user._id,
+      paymentAmount: paymentAmountInRupees,
+      notes: { $regex: planCode }
+    });
+    if (existingComm) return;
+
+    const settings = await SystemSettings.findOne({ key: 'global_settings' });
+    const rate = partner.partnerCommissionRate || settings?.defaultPartnerCommissionRate || 20;
+
+    const commissionAmount = Math.round((paymentAmountInRupees * rate) / 100);
+
+    if (commissionAmount > 0) {
+      await PartnerCommission.create({
+        partner: partner._id,
+        referredUser: user._id,
+        paymentAmount: paymentAmountInRupees,
+        commissionAmount: commissionAmount,
+        commissionRate: rate,
+        status: 'APPROVED',
+        notes: `Subscription payment for plan: ${planCode}`
+      });
+      logger.info(`Recorded Partner Commission of ₹${commissionAmount} for Partner ${partner.email}`);
+    }
+  } catch (err) {
+    logger.error('Failed to process partner commission:', err);
+  }
+};
+
 exports.getPlans = async (req, res, next) => {
   try {
     const plans = await Plan.find({ isActive: true });
@@ -173,6 +213,12 @@ exports.verifyPayment = async (req, res, next) => {
         billingPeriod: { start: now, end: periodEnd }
       }
     );
+
+    // Process Sales Partner Commission if user was referred by a Sales Partner
+    if (user && user.referredByPartner) {
+      const paymentInRupees = planInfo ? planInfo.price : 0;
+      await processPartnerCommission(user, paymentInRupees, planCode);
+    }
 
     res.status(200).json({ status: 'success', message: 'Payment verified and plan activated successfully!', data: { user } });
   } catch (err) {

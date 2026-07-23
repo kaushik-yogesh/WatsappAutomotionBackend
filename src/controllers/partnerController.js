@@ -43,6 +43,36 @@ exports.getPartnerDashboard = catchAsync(async (req, res, next) => {
     .select('name email createdAt subscription')
     .sort('-createdAt');
 
+  // Auto-sync missing commissions for referred users who upgraded/purchased a plan
+  const planPrices = { starter: 999, pro: 2999, enterprise: 9999 };
+  const settings = await getSystemSettings();
+  const rate = user.partnerCommissionRate || settings.defaultPartnerCommissionRate || 20;
+
+  for (const refUser of referredUsers) {
+    const userPlan = refUser.subscription?.plan;
+    if (userPlan && userPlan !== 'free') {
+      const existing = await PartnerCommission.findOne({ partner: user._id, referredUser: refUser._id });
+      if (!existing) {
+        const Plan = require('../models/Plan');
+        const planInfo = await Plan.findOne({ code: userPlan });
+        const price = planInfo ? planInfo.price : (planPrices[userPlan] || 999);
+        const commAmount = Math.round((price * rate) / 100);
+
+        if (commAmount > 0) {
+          await PartnerCommission.create({
+            partner: user._id,
+            referredUser: refUser._id,
+            paymentAmount: price,
+            commissionAmount: commAmount,
+            commissionRate: rate,
+            status: 'APPROVED',
+            notes: `Auto-synced referral commission for plan: ${userPlan}`
+          });
+        }
+      }
+    }
+  }
+
   // Get commissions summary
   const commissions = await PartnerCommission.find({ partner: user._id });
 
