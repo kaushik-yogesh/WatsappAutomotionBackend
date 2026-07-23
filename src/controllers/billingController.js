@@ -74,7 +74,7 @@ exports.createSubscription = async (req, res, next) => {
     const order = await rzp.orders.create({
       amount: amountInPaisa,
       currency: 'INR',
-      receipt: `SUB_${req.user._id}_${Date.now()}`,
+      receipt: `rcpt_${req.user._id.toString().slice(-8)}_${Date.now()}`,
       notes: { userId: req.user._id.toString(), plan: planId, isSubscription: "true" },
     });
 
