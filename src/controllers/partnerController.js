@@ -88,8 +88,6 @@ exports.getPartnerDashboard = catchAsync(async (req, res, next) => {
     .filter(c => c.status === 'PAID')
     .reduce((sum, c) => sum + c.commissionAmount, 0);
 
-  const settings = await getSystemSettings();
-
   res.status(200).json({
     status: 'success',
     data: {
