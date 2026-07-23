@@ -11,10 +11,14 @@ const creditHelper = require('../utils/creditHelper');
 const { calculateTax } = require('../services/taxService');
 const { generateInvoicePDF } = require('../services/invoiceService');
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+const getRazorpayInstance = () => {
+  const keyId = (process.env.RAZORPAY_KEY_ID || '').trim();
+  const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
+  if (!keyId || !keySecret || keyId === 'dummy') {
+    return null;
+  }
+  return new Razorpay({ key_id: keyId, key_secret: keySecret });
+};
 
 exports.getPlans = async (req, res, next) => {
   try {
@@ -46,8 +50,9 @@ exports.createSubscription = async (req, res, next) => {
     const planId = req.body.planId || req.body.plan;
     const { customerStateCode } = req.body;
 
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_ID === 'dummy') {
-      return next(new AppError('Razorpay payment gateway is not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in backend environment variables.', 500));
+    const rzp = getRazorpayInstance();
+    if (!rzp) {
+      return next(new AppError('Razorpay payment gateway is not configured. Please set valid RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in backend .env file.', 500));
     }
     
     // Fetch plan
@@ -66,7 +71,7 @@ exports.createSubscription = async (req, res, next) => {
     const taxInfo = calculateTax(planInfo.price, customerStateCode);
     const amountInPaisa = Math.round(taxInfo.totalAmount * 100);
 
-    const order = await razorpay.orders.create({
+    const order = await rzp.orders.create({
       amount: amountInPaisa,
       currency: 'INR',
       receipt: `SUB_${req.user._id}_${Date.now()}`,
@@ -88,7 +93,7 @@ exports.createSubscription = async (req, res, next) => {
         orderId: order.id,
         amount: amountInPaisa,
         currency: 'INR',
-        keyId: process.env.RAZORPAY_KEY_ID,
+        keyId: process.env.RAZORPAY_KEY_ID?.trim(),
         plan: planId,
         planLabel: planInfo.name,
         prefill: { name: req.user.name, email: req.user.email },
@@ -96,8 +101,12 @@ exports.createSubscription = async (req, res, next) => {
       },
     });
   } catch (err) {
+    const errorDetail = err.error?.description || err.description || err.message || 'Unknown Razorpay Error';
     logger.error('Create Razorpay subscription order error:', err);
-    next(new AppError(`Razorpay payment order creation failed: ${err.message}`, 500));
+    if (err.statusCode === 401 || errorDetail.toLowerCase().includes('authentication failed')) {
+      return next(new AppError('Razorpay Authentication Failed: Invalid RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET in backend .env file. Please verify your Razorpay API key credentials.', 401));
+    }
+    next(new AppError(`Razorpay payment order creation failed: ${errorDetail}`, 500));
   }
 };
 
