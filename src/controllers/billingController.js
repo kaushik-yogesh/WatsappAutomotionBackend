@@ -20,7 +20,7 @@ const getRazorpayInstance = () => {
   return new Razorpay({ key_id: keyId, key_secret: keySecret });
 };
 
-const processPartnerCommission = async (user, paymentAmountInRupees, planCode) => {
+const processPartnerCommission = async (user, paymentAmountInRupees, planCode, paymentId = null) => {
   if (!user || !user.referredByPartner || paymentAmountInRupees <= 0) return;
   try {
     const SystemSettings = require('../models/SystemSettings');
@@ -29,13 +29,19 @@ const processPartnerCommission = async (user, paymentAmountInRupees, planCode) =
     const partner = await User.findById(user.referredByPartner);
     if (!partner) return;
 
-    // Check if commission for this specific plan payment was already recorded
-    const existingComm = await PartnerCommission.findOne({
+    // Check if commission for this specific payment was already recorded
+    const query = {
       partner: partner._id,
       referredUser: user._id,
-      paymentAmount: paymentAmountInRupees,
-      notes: { $regex: planCode }
-    });
+    };
+    if (paymentId) {
+      query.payment = paymentId;
+    } else {
+      query.paymentAmount = paymentAmountInRupees;
+      query.notes = { $regex: planCode };
+    }
+
+    const existingComm = await PartnerCommission.findOne(query);
     if (existingComm) return;
 
     const settings = await SystemSettings.findOne({ key: 'global_settings' });
@@ -47,6 +53,7 @@ const processPartnerCommission = async (user, paymentAmountInRupees, planCode) =
       await PartnerCommission.create({
         partner: partner._id,
         referredUser: user._id,
+        payment: paymentId || null,
         paymentAmount: paymentAmountInRupees,
         commissionAmount: commissionAmount,
         commissionRate: rate,
@@ -205,19 +212,20 @@ exports.verifyPayment = async (req, res, next) => {
     }
 
     // Update payment record
-    await Payment.findOneAndUpdate(
+    const paymentDoc = await Payment.findOneAndUpdate(
       { razorpayOrderId },
       {
         status: 'captured',
         razorpayPaymentId,
         billingPeriod: { start: now, end: periodEnd }
-      }
+      },
+      { new: true }
     );
 
     // Process Sales Partner Commission if user was referred by a Sales Partner
     if (user && user.referredByPartner) {
       const paymentInRupees = planInfo ? planInfo.price : 0;
-      await processPartnerCommission(user, paymentInRupees, planCode);
+      await processPartnerCommission(user, paymentInRupees, planCode, paymentDoc?._id);
     }
 
     res.status(200).json({ status: 'success', message: 'Payment verified and plan activated successfully!', data: { user } });
@@ -284,33 +292,8 @@ exports.razorpayWebhook = async (req, res, next) => {
 
         // Process Sales Partner Commission if user was referred by a Sales Partner
         if (user.referredByPartner) {
-          try {
-            const SystemSettings = require('../models/SystemSettings');
-            const PartnerCommission = require('../models/PartnerCommission');
-            
-            const partner = await User.findById(user.referredByPartner);
-            if (partner) {
-              const settings = await SystemSettings.findOne({ key: 'global_settings' });
-              const rate = partner.partnerCommissionRate || settings?.defaultPartnerCommissionRate || 20;
-              
-              const paymentInRupees = (payment.amount || 0) / 100;
-              const commissionAmount = Math.round((paymentInRupees * rate) / 100);
-
-              await PartnerCommission.create({
-                partner: partner._id,
-                referredUser: user._id,
-                paymentAmount: paymentInRupees,
-                commissionAmount: commissionAmount,
-                commissionRate: rate,
-                status: 'APPROVED',
-                notes: `Subscription payment for plan: ${payment.plan}`
-              });
-
-              logger.info(`Recorded Partner Commission of ₹${commissionAmount} for Partner ${partner.email}`);
-            }
-          } catch (err) {
-            logger.error('Failed to process partner commission:', err);
-          }
+          const paymentInRupees = (payment.amount || 0) / 100;
+          await processPartnerCommission(user, paymentInRupees, payment.plan, payment._id);
         }
 
         // Invoice Generation
@@ -384,7 +367,7 @@ exports.upgradePlan = async (req, res, next) => {
     user.subscription.totalCredits = (user.subscription.totalCredits || 0) + (planInfo.credits || 500);
     await user.save();
 
-    await Payment.create({
+    const paymentObj = await Payment.create({
       user: req.user._id,
       razorpayOrderId: `DIRECT_UPGRADE_${Date.now()}`,
       razorpayPaymentId: `DIRECT_PAY_${Date.now()}`,
@@ -393,6 +376,10 @@ exports.upgradePlan = async (req, res, next) => {
       status: 'captured',
       billingPeriod: { start: now, end: periodEnd }
     });
+
+    if (user && user.referredByPartner) {
+      await processPartnerCommission(user, planInfo.price || 0, planCode, paymentObj._id);
+    }
 
     res.status(200).json({
       status: 'success',
