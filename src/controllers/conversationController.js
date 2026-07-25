@@ -215,7 +215,9 @@ exports.getDashboardStats = async (req, res, next) => {
       platformBreakdown,
       handoffCount,
       activeBroadcasts,
-      dealsData
+      dealsData,
+      topAgents,
+      recentDeals
     ] = await Promise.all([
       Conversation.countDocuments(baseFilter),
       Conversation.countDocuments({ ...baseFilter, status: 'active' }),
@@ -240,7 +242,16 @@ exports.getDashboardStats = async (req, res, next) => {
       Deal.aggregate([
         { $match: baseFilter },
         { $group: { _id: null, totalPipelineValue: { $sum: '$amount' }, dealsCount: { $sum: 1 } } }
-      ])
+      ]),
+      Conversation.aggregate([
+        { $match: baseFilter },
+        { $group: { _id: '$agent', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 3 },
+        { $lookup: { from: 'agents', localField: '_id', foreignField: '_id', as: 'agentInfo' } },
+        { $unwind: { path: '$agentInfo', preserveNullAndEmptyArrays: true } }
+      ]),
+      Deal.find(baseFilter).sort({ createdAt: -1 }).limit(3).lean()
     ]);
 
     // Daily message count for last 7 days
@@ -265,6 +276,11 @@ exports.getDashboardStats = async (req, res, next) => {
         activeBroadcasts,
         pipelineValue: dealsData[0]?.totalPipelineValue || 0,
         dealsCount: dealsData[0]?.dealsCount || 0,
+        topAgents: topAgents.map(a => ({
+          name: a.agentInfo?.name || 'Unknown Agent',
+          count: a.count
+        })),
+        recentDeals,
         usage: {
           messagesThisMonth: req.user.usage?.messagesThisMonth || 0,
           limit: (await req.user.getPlanLimits()).messages,
@@ -318,7 +334,7 @@ exports.getLeadsDashboard = async (req, res, next) => {
 
     // Compute interest score + classify each lead
     const leads = conversations.map((conv) => {
-      const userMessages = conv.messages.filter((m) => m.role === 'user');
+      const userMessages = (conv.messages || []).filter((m) => m.role === 'user');
       const msgCount = userMessages.length;
       const allText = userMessages.map((m) => m.content?.toLowerCase() || '').join(' ');
 
