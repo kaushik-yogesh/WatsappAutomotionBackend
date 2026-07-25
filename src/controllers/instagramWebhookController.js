@@ -575,7 +575,6 @@ async function handleInstagramComment(commentData, igAccount, agent) {
 
         logger.info(`AI generated comment reply: ${aiResult.content}`);
 
-        const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
         await igService.replyToComment(igAccount.igAccountId, commentId, aiResult.content);
 
         logger.info(`Successfully replied to comment ${commentId}`);
