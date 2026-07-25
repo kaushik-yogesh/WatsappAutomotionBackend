@@ -45,7 +45,7 @@ exports.createAgent = async (req, res, next) => {
 
 exports.getAgents = async (req, res, next) => {
   try {
-    const agents = await Agent.find({ organization: req.organization._id, isActive: true })
+    const agents = await Agent.find({ organization: req.organization._id })
       .populate('whatsappAccount', 'displayPhoneNumber verifiedName status')
       .populate('telegramAccount', 'botUsername botName status')
       .populate('instagramAccount', 'igUsername igAccountId status')
