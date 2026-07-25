@@ -297,7 +297,7 @@ exports.receiveMessage = async (req, res) => {
           .map((m) => ({ role: m.role, content: m.content }));
 
         // 9. Generate AI response or use Keyword Trigger
-        const matchedTrigger = await checkKeywordMatch(tgAccount.organization, text, 'telegram', 'DM');
+        const matchedTrigger = await checkKeywordMatch(tgAccount.organization, text, 'telegram', 'DM', agent?._id);
         const tgService = new TelegramService(tgAccount.botToken);
 
         if (matchedTrigger && matchedTrigger.action === 'SEND_MESSAGE') {

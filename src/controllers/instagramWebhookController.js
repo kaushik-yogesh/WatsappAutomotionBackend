@@ -328,7 +328,7 @@ async function handleInstagramDM(event, igAccount, agent) {
       const wantsVoice = isVoiceRequest(text) || isAudioRequest;
 
       // Check for Keyword Triggers
-      const matchedTrigger = await checkKeywordMatch(igAccount.organization, text, 'instagram', 'DM');
+      const matchedTrigger = await checkKeywordMatch(igAccount.organization, text, 'instagram', 'DM', agent?._id);
       if (matchedTrigger && matchedTrigger.action === 'SEND_MESSAGE') {
         logger.info(`[KEYWORD TRIGGER] Matched trigger ${matchedTrigger._id} for Instagram DM from ${senderId}`);
         let sentMsg;
@@ -561,7 +561,7 @@ async function handleInstagramComment(commentData, igAccount, agent) {
         };
         
         // Check for Keyword Triggers
-        const matchedTrigger = await checkKeywordMatch(igAccount.organization, text, 'instagram', 'COMMENT');
+        const matchedTrigger = await checkKeywordMatch(igAccount.organization, text, 'instagram', 'COMMENT', agent?._id);
         const igService = new InstagramService(igAccount.pageAccessToken, igAccount.pageId);
         
         if (matchedTrigger && matchedTrigger.action === 'SEND_MESSAGE') {
