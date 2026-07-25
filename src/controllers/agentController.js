@@ -90,10 +90,8 @@ exports.updateAgent = async (req, res, next) => {
 
 exports.deleteAgent = async (req, res, next) => {
   try {
-    const agent = await Agent.findOneAndUpdate(
-      { _id: req.params.id, organization: req.organization._id },
-      { isActive: false },
-      { new: true }
+    const agent = await Agent.findOneAndDelete(
+      { _id: req.params.id, organization: req.organization._id }
     );
     if (!agent) return next(new AppError('Agent not found.', 404));
     res.status(200).json({ status: 'success', message: 'Agent deleted.' });
