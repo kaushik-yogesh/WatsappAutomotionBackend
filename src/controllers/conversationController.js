@@ -1,4 +1,6 @@
 const Conversation = require('../models/Conversation');
+const Deal = require('../models/Deal');
+const Broadcast = require('../models/Broadcast');
 const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const WhatsAppService = require('../services/whatsappService');
@@ -210,6 +212,10 @@ exports.getDashboardStats = async (req, res, next) => {
       unreadCount,
       weeklyMessages,
       avgResponseTime,
+      platformBreakdown,
+      handoffCount,
+      activeBroadcasts,
+      dealsData
     ] = await Promise.all([
       Conversation.countDocuments(baseFilter),
       Conversation.countDocuments({ ...baseFilter, status: 'active' }),
@@ -225,6 +231,16 @@ exports.getDashboardStats = async (req, res, next) => {
         { $match: { 'messages.role': 'assistant', 'messages.responseTime': { $exists: true } } },
         { $group: { _id: null, avg: { $avg: '$messages.responseTime' } } },
       ]),
+      Conversation.aggregate([
+        { $match: baseFilter },
+        { $group: { _id: '$platform', count: { $sum: 1 } } },
+      ]),
+      Conversation.countDocuments({ ...baseFilter, status: 'human_handoff' }),
+      Broadcast.countDocuments({ ...baseFilter, status: 'IN_PROGRESS' }),
+      Deal.aggregate([
+        { $match: baseFilter },
+        { $group: { _id: null, totalPipelineValue: { $sum: '$amount' }, dealsCount: { $sum: 1 } } }
+      ])
     ]);
 
     // Daily message count for last 7 days
@@ -244,6 +260,11 @@ exports.getDashboardStats = async (req, res, next) => {
         weeklyMessages: weeklyMessages[0]?.total || 0,
         avgResponseTime: Math.round(avgResponseTime[0]?.avg || 0),
         dailyStats,
+        platformBreakdown: platformBreakdown.map((p) => ({ platform: p._id || 'whatsapp', count: p.count })),
+        handoffCount,
+        activeBroadcasts,
+        pipelineValue: dealsData[0]?.totalPipelineValue || 0,
+        dealsCount: dealsData[0]?.dealsCount || 0,
         usage: {
           messagesThisMonth: req.user.usage?.messagesThisMonth || 0,
           limit: (await req.user.getPlanLimits()).messages,
@@ -270,7 +291,9 @@ exports.getLeadsDashboard = async (req, res, next) => {
       'kitna', 'khareedna', 'lena hai', 'batao', 'chahiye', 'karna hai',
     ];
 
-    const filter = { user: userId };
+    const filter = req.organization 
+      ? { organization: req.organization._id }
+      : { user: userId };
     if (platform) filter.platform = platform;
     if (status) filter.status = status;
     if (search) {
@@ -348,6 +371,7 @@ exports.getLeadsDashboard = async (req, res, next) => {
     });
 
     // ── Summary aggregations ──────────────────────────────────────────────────
+    const baseSummaryFilter = req.organization ? { organization: req.organization._id } : { user: userId };
     const [
       platformBreakdown,
       handoffCount,
@@ -355,13 +379,13 @@ exports.getLeadsDashboard = async (req, res, next) => {
       hotLeadsCount,
     ] = await Promise.all([
       Conversation.aggregate([
-        { $match: { user: userId } },
+        { $match: baseSummaryFilter },
         { $group: { _id: '$platform', count: { $sum: 1 } } },
       ]),
-      Conversation.countDocuments({ user: userId, status: 'human_handoff' }),
-      Conversation.countDocuments({ user: userId }),
+      Conversation.countDocuments({ ...baseSummaryFilter, status: 'human_handoff' }),
+      Conversation.countDocuments(baseSummaryFilter),
       // Hot leads = conversations with totalMessages >= 6 (proxy for high engagement)
-      Conversation.countDocuments({ user: userId, totalMessages: { $gte: 6 } }),
+      Conversation.countDocuments({ ...baseSummaryFilter, totalMessages: { $gte: 6 } }),
     ]);
 
     res.status(200).json({
