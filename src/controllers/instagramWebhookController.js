@@ -496,9 +496,15 @@ async function handleInstagramComment(commentData, igAccount, agent) {
 
     webhookQueue.enqueue(`instagram_comment_${commenterId}`, async () => {
       try {
+        const Agent = require('../models/Agent');
+        const agent = await Agent.findOne({
+          instagramAccount: igAccount._id,
+          isActive: true
+        });
+
         // 1. Check if bot is enabled for this account specifically OR via Agent
-        let enabled = igAccount.commentBotEnabled;
-        let systemPrompt = igAccount.commentBotPrompt;
+        let enabled = igAccount.commentBotEnabled || !!agent;
+        let systemPrompt = igAccount.commentBotPrompt || agent?.systemPrompt;
 
         if (!enabled) {
           logger.info(`[COMMENT SKIP]: Bot is disabled in settings for account: ${igAccount.igUsername || igAccount.igAccountId}`);
@@ -590,9 +596,11 @@ async function handleInstagramComment(commentData, igAccount, agent) {
           description: `AI Agent: Instagram comment reply to comment ID ${commentId}`,
           metadata: { commentId, platform: 'instagram' },
         });
-        await Agent.findByIdAndUpdate(agent._id, {
-          $inc: { 'stats.totalMessages': 1 },
-        });
+        if (agent) {
+          await Agent.findByIdAndUpdate(agent._id, {
+            $inc: { 'stats.totalMessages': 1 },
+          });
+        }
       } catch (error) {
         logger.error(`Error processing Instagram comment task: ${error.message}`, { stack: error.stack });
       }
