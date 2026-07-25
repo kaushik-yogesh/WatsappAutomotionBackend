@@ -337,7 +337,6 @@ exports.receiveMessage = async (req, res) => {
         const aiResult = await AIService.generate(agent, contextMessages.slice(0, -1), text);
       
         // 10. Send AI reply
-        const tgService = new TelegramService(tgAccount.botToken);
         const sentMsg = await tgService.sendTextMessage(chatId, aiResult.content || "this is new AI reply");
 
         // 11. Save assistant message
