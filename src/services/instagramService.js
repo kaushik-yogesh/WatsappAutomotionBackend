@@ -297,8 +297,7 @@ class InstagramService {
         lastResponse = await axios.post(
           `${this.baseUrl}/${endpointId}/messages`,
           {
-            messaging_type: 'MESSAGE_TAG',
-            tag: 'HUMAN_AGENT',
+            messaging_type: 'RESPONSE',
             recipient: { id: recipientId },
             message: { text: chunk },
           },
@@ -324,8 +323,7 @@ class InstagramService {
       const response = await axios.post(
         `${this.baseUrl}/${endpointId}/messages`,
         {
-          messaging_type: 'MESSAGE_TAG',
-          tag: 'HUMAN_AGENT',
+          messaging_type: 'RESPONSE',
           recipient: { id: recipientId },
           message: {
             attachment: {
@@ -350,8 +348,7 @@ class InstagramService {
       const response = await axios.post(
         `${this.baseUrl}/${endpointId}/messages`,
         {
-          messaging_type: 'MESSAGE_TAG',
-          tag: 'HUMAN_AGENT',
+          messaging_type: 'RESPONSE',
           recipient: { id: recipientId },
           message: {
             attachment: {
@@ -376,8 +373,7 @@ class InstagramService {
       const response = await axios.post(
         `${this.baseUrl}/${endpointId}/messages`,
         {
-          messaging_type: 'MESSAGE_TAG',
-          tag: 'HUMAN_AGENT',
+          messaging_type: 'RESPONSE',
           recipient: { id: recipientId },
           message: {
             attachment: {
