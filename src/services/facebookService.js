@@ -57,7 +57,8 @@ class FacebookService {
         lastResponse = await axios.post(
           `${this.baseUrl}/me/messages`,
           {
-            messaging_type: 'RESPONSE',
+            messaging_type: 'MESSAGE_TAG',
+            tag: 'HUMAN_AGENT',
             recipient: { id: recipientId },
             message: { text: chunk },
           },
