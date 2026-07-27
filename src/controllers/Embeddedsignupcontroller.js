@@ -82,7 +82,7 @@ exports.embeddedSignupCallback = async (req, res, next) => {
             wabas.push(...wabaRes.data.data);
           }
         } catch (e2) {
-          logger.warn('whatsapp_business_accounts warning:', e2.response?.data?.error?.message || e2.message);
+          console.warn('[EmbeddedSignup] whatsapp_business_accounts warning:', e2.response?.data?.error?.message || e2.message);
         }
 
         // 3. Fallback via GET /me/businesses (if business_management permission granted)
@@ -127,9 +127,11 @@ exports.embeddedSignupCallback = async (req, res, next) => {
               }
             }
           } catch (phoneErr) {
-            logger.warn(`Failed to fetch phone numbers for WABA ${waba.id}:`, phoneErr.response?.data?.error?.message || phoneErr.message);
+            console.warn(`[EmbeddedSignup] Failed to fetch phone numbers for WABA ${waba.id}:`, phoneErr.response?.data?.error?.message || phoneErr.message);
           }
         }
+
+        console.log(`[EmbeddedSignup] Fetched ${phoneNumbers.length} phone numbers from Meta.`);
 
         // Auto-save connected phone numbers directly to MongoDB
         const orgId = req.organization?._id || req.user?.currentOrganization || req.user?.organization;
@@ -137,6 +139,13 @@ exports.embeddedSignupCallback = async (req, res, next) => {
 
         for (const phone of phoneNumbers) {
           try {
+            // Prevent cross-workspace stealing
+            const existing = await WhatsappAccount.findOne({ phoneNumberId: phone.phoneNumberId });
+            if (existing && existing.organization?.toString() !== orgId.toString()) {
+               console.warn(`[EmbeddedSignup] Skipping phone ${phone.phoneNumberId} - belongs to another organization.`);
+               continue;
+            }
+
             // Subscribe to WABA webhook on Meta
             try {
               await axios.post(
@@ -144,7 +153,9 @@ exports.embeddedSignupCallback = async (req, res, next) => {
                 {},
                 { params: { access_token: longLivedToken } }
               );
-            } catch (subErr) {}
+            } catch (subErr) {
+               console.warn(`[EmbeddedSignup] Webhook sub failed:`, subErr.message);
+            }
 
             const account = await WhatsappAccount.findOneAndUpdate(
               { phoneNumberId: phone.phoneNumberId },
@@ -169,8 +180,12 @@ exports.embeddedSignupCallback = async (req, res, next) => {
             delete accObj.accessToken;
             savedAccounts.push(accObj);
           } catch (saveErr) {
-            logger.warn(`Auto-save error for phone ${phone.phoneNumberId}:`, saveErr.message);
+            console.warn(`[EmbeddedSignup] Auto-save error for phone ${phone.phoneNumberId}:`, saveErr.message);
           }
+        }
+
+        if (savedAccounts.length === 0) {
+            return next(new AppError('No WhatsApp phone numbers found. Please make sure you explicitly select your business and phone numbers during the Meta authentication flow (even if you previously connected them).', 400));
         }
 
         res.status(200).json({
