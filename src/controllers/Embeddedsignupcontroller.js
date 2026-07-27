@@ -137,12 +137,15 @@ exports.embeddedSignupCallback = async (req, res, next) => {
         const orgId = req.organization?._id || req.user?.currentOrganization || req.user?.organization;
         const savedAccounts = [];
 
+        let skippedDueToOrg = 0;
+
         for (const phone of phoneNumbers) {
           try {
             // Prevent cross-workspace stealing
             const existing = await WhatsappAccount.findOne({ phoneNumberId: phone.phoneNumberId });
             if (existing && existing.organization?.toString() !== orgId.toString()) {
                console.warn(`[EmbeddedSignup] Skipping phone ${phone.phoneNumberId} - belongs to another organization.`);
+               skippedDueToOrg++;
                continue;
             }
 
@@ -185,6 +188,9 @@ exports.embeddedSignupCallback = async (req, res, next) => {
         }
 
         if (savedAccounts.length === 0) {
+            if (phoneNumbers.length > 0 && skippedDueToOrg > 0) {
+                return next(new AppError('The WhatsApp number you selected is already connected to another Workspace. Please disconnect it from that Workspace first, or use a different number.', 400));
+            }
             return next(new AppError('No WhatsApp phone numbers found. Please make sure you explicitly select your business and phone numbers during the Meta authentication flow (even if you previously connected them).', 400));
         }
 
