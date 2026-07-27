@@ -609,7 +609,7 @@ exports.getMessages = async (req, res) => {
 exports.addTag = catchAsync(async (req, res, next) => {
   const { tag } = req.body;
   const conversation = await Conversation.findOneAndUpdate(
-    { _id: req.params.id, organization: req.user.organization },
+    { _id: req.params.id, organization: (req.organization?._id || req.user?.currentOrganization) },
     { $addToSet: { tags: tag } },
     { new: true }
   );
@@ -620,7 +620,7 @@ exports.addTag = catchAsync(async (req, res, next) => {
 exports.removeTag = catchAsync(async (req, res, next) => {
   const { tag } = req.params;
   const conversation = await Conversation.findOneAndUpdate(
-    { _id: req.params.id, organization: req.user.organization },
+    { _id: req.params.id, organization: (req.organization?._id || req.user?.currentOrganization) },
     { $pull: { tags: tag } },
     { new: true }
   );

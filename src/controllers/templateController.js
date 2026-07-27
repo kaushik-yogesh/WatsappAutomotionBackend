@@ -90,7 +90,7 @@ exports.getSystemTemplates = catchAsync(async (req, res, next) => {
 
 // GET /api/templates - Get user's synced & created templates
 exports.getAllTemplates = catchAsync(async (req, res, next) => {
-  const templates = await Template.find({ organization: req.user.currentOrganization || req.user.organization })
+  const templates = await Template.find({ organization: req.user.currentOrganization || (req.organization?._id || req.user?.currentOrganization) })
     .sort('-createdAt');
 
   res.status(200).json({ status: 'success', data: { templates } });
@@ -104,7 +104,7 @@ exports.syncTemplatesFromMeta = catchAsync(async (req, res, next) => {
   const metaResponse = await waService.getMessageTemplates(waAccount.wabaId);
   const metaTemplates = metaResponse.data || [];
 
-  const orgId = req.user.currentOrganization || req.user.organization;
+  const orgId = req.user.currentOrganization || (req.organization?._id || req.user?.currentOrganization);
 
   const upsertPromises = metaTemplates.map(tpl => {
     return Template.findOneAndUpdate(
@@ -165,7 +165,7 @@ exports.createTemplate = catchAsync(async (req, res, next) => {
   // Submit directly to Meta Graph API
   const metaResult = await waService.createMessageTemplate(waAccount.wabaId, metaPayload);
 
-  const orgId = req.user.currentOrganization || req.user.organization;
+  const orgId = req.user.currentOrganization || (req.organization?._id || req.user?.currentOrganization);
 
   // Save / Upsert in MongoDB
   const template = await Template.findOneAndUpdate(
@@ -218,7 +218,7 @@ exports.cloneSystemTemplate = catchAsync(async (req, res, next) => {
   // Submit to Meta Graph API
   const metaResult = await waService.createMessageTemplate(waAccount.wabaId, metaPayload);
 
-  const orgId = req.user.currentOrganization || req.user.organization;
+  const orgId = req.user.currentOrganization || (req.organization?._id || req.user?.currentOrganization);
 
   const template = await Template.create({
     organization: orgId,
@@ -240,7 +240,7 @@ exports.cloneSystemTemplate = catchAsync(async (req, res, next) => {
 
 // DELETE /api/templates/:id - Delete template on Meta Graph API and MongoDB
 exports.deleteTemplate = catchAsync(async (req, res, next) => {
-  const orgId = req.user.currentOrganization || req.user.organization;
+  const orgId = req.user.currentOrganization || (req.organization?._id || req.user?.currentOrganization);
   const template = await Template.findOne({ _id: req.params.id, organization: orgId });
 
   if (!template) {

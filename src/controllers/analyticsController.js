@@ -19,8 +19,8 @@ const getDateRange = (timeframe) => {
 };
 
 // Helper to get org filter
-const getOrgFilter = (req) => req.user.organization 
-  ? { organization: req.user.organization }
+const getOrgFilter = (req) => (req.organization?._id || req.user?.currentOrganization) 
+  ? { organization: (req.organization?._id || req.user?.currentOrganization) }
   : { user: req.user._id };
 
 exports.getMessageVolume = async (req, res, next) => {
