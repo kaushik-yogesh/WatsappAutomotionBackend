@@ -174,12 +174,22 @@ const emailTemplates = {
     </div>`,
   }),
 
-  teamInvite: (email, token) => ({
+  teamInviteNew: (email) => ({
     subject: 'You have been invited to join a workspace',
     html: `<div style="font-family:sans-serif;max-width:600px;margin:auto">
       <h2>Welcome! You've been invited to join a workspace.</h2>
-      <p>To accept the invitation and access your team's workspace, please set up your account password by clicking the button below:</p>
-      <a href="${process.env.FRONTEND_URL}/reset-password?token=${token}" style="background:#25D366;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:10px;">Set Password & Accept Invite</a>
+      <p>To accept the invitation and access your team's workspace, please create your account by clicking the button below:</p>
+      <a href="${process.env.FRONTEND_URL}/signup?email=${encodeURIComponent(email)}" style="background:#25D366;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:10px;">Sign Up & Accept Invite</a>
+    </div>`,
+  }),
+
+  teamInviteExisting: (email) => ({
+    subject: 'You have been added to a workspace',
+    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto">
+      <h2>Great news!</h2>
+      <p>You have been added as a team member to a new workspace.</p>
+      <p>You can now access it by logging into your account and switching workspaces from your dashboard.</p>
+      <a href="${process.env.FRONTEND_URL}/dashboard" style="background:#25D366;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:10px;">Go to Dashboard</a>
     </div>`,
   }),
 

@@ -102,7 +102,11 @@ exports.register = async (req, res, next) => {
     const { name, email, password, ref, partnerCode } = req.body;
 
     const existing = await User.findOne({ email });
-    if (existing) return next(new AppError('Email already registered. Please log in.', 400));
+    if (existing) {
+      if (existing.isActive) {
+        return next(new AppError('Email already registered. Please log in.', 400));
+      }
+    }
 
     let referredByPartner = null;
     const codeToSearch = ref || partnerCode;
@@ -119,18 +123,38 @@ exports.register = async (req, res, next) => {
       if (partner) referredByPartner = partner._id;
     }
 
-    const user = await User.create({ name, email, password, role: 'user', referredByPartner });
-
-    // Create default organization
+    let user;
+    let existingOrg = null;
     const Organization = require('../models/Organization');
-    const org = await Organization.create({
-      name: `${user.name}'s Workspace`,
-      owner: user._id,
-      members: [{ user: user._id, role: 'admin' }]
-    });
 
-    user.currentOrganization = org._id;
-    await user.save({ validateBeforeSave: false });
+    if (existing && !existing.isActive) {
+      // User is an inactive stub from a team invite. Claim this account!
+      user = existing;
+      user.name = name;
+      user.password = password;
+      user.isActive = true;
+      user.role = 'user';
+      if (referredByPartner) user.referredByPartner = referredByPartner;
+      
+      existingOrg = await Organization.findOne({ "members.user": user._id });
+      if (existingOrg) {
+        user.currentOrganization = existingOrg._id;
+      }
+      await user.save();
+    } else {
+      user = await User.create({ name, email, password, role: 'user', referredByPartner });
+    }
+
+    if (!existingOrg) {
+      // Create default organization
+      existingOrg = await Organization.create({
+        name: `${user.name}'s Workspace`,
+        owner: user._id,
+        members: [{ user: user._id, role: 'admin' }]
+      });
+      user.currentOrganization = existingOrg._id;
+      await user.save({ validateBeforeSave: false });
+    }
 
     // Send verification email
     const verifyToken = user.createEmailVerifyToken();

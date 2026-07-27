@@ -115,22 +115,29 @@ exports.inviteMember = async (req, res, next) => {
         email,
         name: email.split('@')[0], // Default name from email
         password: tempPassword,
-        isActive: false, // Wait for them to set password
+        isActive: false, // Wait for them to set password / signup
         isEmailVerified: false
       });
       
-      const resetToken = invitedUser.createPasswordResetToken();
       await invitedUser.save({ validateBeforeSave: false });
       isNewUser = true;
 
-      // Send invite email
+      // Send invite email for new user
       try {
-        const { subject, html } = emailTemplates.teamInvite(email, resetToken);
+        const { subject, html } = emailTemplates.teamInviteNew(email);
         await sendEmail({ to: email, subject, html });
-        logger.info(`Invite email sent to ${email} for organization ${organizationId}`);
+        logger.info(`Invite email (new) sent to ${email} for organization ${organizationId}`);
       } catch (emailErr) {
         logger.error(`Failed to send invite email to ${email}: ${emailErr.message}`);
-        // We don't fail the request if email fails, but it's not ideal
+      }
+    } else {
+      // User exists, send invite email for existing user
+      try {
+        const { subject, html } = emailTemplates.teamInviteExisting(email);
+        await sendEmail({ to: email, subject, html });
+        logger.info(`Invite email (existing) sent to ${email} for organization ${organizationId}`);
+      } catch (emailErr) {
+        logger.error(`Failed to send invite email to ${email}: ${emailErr.message}`);
       }
     }
     
