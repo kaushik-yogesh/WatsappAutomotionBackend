@@ -176,6 +176,19 @@ exports.embeddedSignupCallback = async (req, res, next) => {
                console.warn(`[EmbeddedSignup] Webhook sub failed:`, subErr.message);
             }
 
+            // Register the phone number for Cloud API
+            try {
+              const pin = Math.floor(100000 + Math.random() * 900000).toString();
+              await axios.post(
+                `${META_API_BASE}/${phone.phoneNumberId}/register`,
+                { messaging_product: 'whatsapp', pin: pin },
+                { params: { access_token: longLivedToken } }
+              );
+              console.log(`[EmbeddedSignup] Phone ${phone.phoneNumberId} registered successfully with PIN ${pin}.`);
+            } catch (regErr) {
+               console.warn(`[EmbeddedSignup] Registration failed for ${phone.phoneNumberId}:`, regErr.response?.data?.error?.message || regErr.message);
+            }
+
             const account = await WhatsappAccount.findOneAndUpdate(
               { phoneNumberId: phone.phoneNumberId },
               {
