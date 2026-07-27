@@ -8,6 +8,8 @@ const FacebookAccount = require('../models/FacebookAccount');
 const InstagramAccount = require('../models/InstagramAccount');
 const TelegramAccount = require('../models/TelegramAccount');
 const Integration = require('../models/Integration');
+const YoutubeAccount = require('../models/YoutubeAccount');
+const LinkedInAccount = require('../models/LinkedInAccount');
 const AppError = require('../utils/AppError');
 const { sendEmail, emailTemplates } = require('../services/emailService');
 const fraudDetectionService = require('../services/fraudDetectionService');
@@ -65,17 +67,21 @@ exports.getOnboardingStatus = async (req, res, next) => {
       fbCount,
       igCount,
       tgCount,
-      intCount
+      intCount,
+      ytCount,
+      liCount
     ] = await Promise.all([
       Agent.countDocuments({ organization: orgId }),
       WhatsappAccount.countDocuments({ organization: orgId }),
       FacebookAccount.countDocuments({ organization: orgId }),
       InstagramAccount.countDocuments({ organization: orgId }),
       TelegramAccount.countDocuments({ organization: orgId }),
-      Integration.countDocuments({ organization: orgId })
+      Integration.countDocuments({ organization: orgId }),
+      YoutubeAccount.countDocuments({ organization: orgId }),
+      LinkedInAccount.countDocuments({ organization: orgId })
     ]);
 
-    const hasIntegration = (waCount + fbCount + igCount + tgCount + intCount) > 0;
+    const hasIntegration = (waCount + fbCount + igCount + tgCount + intCount + ytCount + liCount) > 0;
     const hasAgent = agentsCount > 0;
 
     res.status(200).json({
