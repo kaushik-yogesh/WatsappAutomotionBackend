@@ -10,14 +10,17 @@ const { emitToUser } = require('../utils/socket');
 const { decrypt } = require('../utils/encryption');
 const logger = require('../utils/logger');
 
+// Helper to get consistent base filter for multi-tenancy
+const getBaseFilter = (req) => {
+  return req.organization 
+    ? { organization: req.organization._id }
+    : { user: req.user._id };
+};
 
 exports.getConversations = async (req, res, next) => {
   try {
     const { status, agentId, platform, page = 1, limit = 20, search } = req.query;
-    // Filter by org if available, fall back to user for backward compat
-    const filter = req.organization 
-      ? { organization: req.organization._id }
-      : { user: req.user._id };
+    const filter = getBaseFilter(req);
 
     if (status) filter.status = status;
     if (platform) filter.platform = platform;
@@ -58,7 +61,7 @@ exports.getConversation = async (req, res, next) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      ...getBaseFilter(req)
     }).populate('agent', 'name aiProvider model');
 
     if (!conversation) return next(new AppError('Conversation not found.', 404));
@@ -86,7 +89,7 @@ exports.replyToConversation = async (req, res, next) => {
     const { message } = req.body;
     if (!message) return next(new AppError('Message is required.', 400));
 
-    const conversation = await Conversation.findOne({ _id: id, user: req.user._id })
+    const conversation = await Conversation.findOne({ _id: id, ...getBaseFilter(req) })
       .populate({ path: 'whatsappAccount', select: '+accessToken phoneNumberId' })
       .populate({ path: 'telegramAccount', select: '+botToken' })
       .populate({ path: 'instagramAccount', select: '+pageAccessToken pageId igAccountId' });
@@ -143,7 +146,7 @@ exports.replyToConversation = async (req, res, next) => {
 exports.closeConversation = async (req, res, next) => {
   try {
     const conversation = await Conversation.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
+      { _id: req.params.id, ...getBaseFilter(req) },
       { status: 'closed', resolvedAt: new Date() },
       { new: true }
     );
@@ -170,7 +173,7 @@ exports.toggleStatus = async (req, res, next) => {
     }
 
     const conversation = await Conversation.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
+      { _id: req.params.id, ...getBaseFilter(req) },
       { status },
       { new: true }
     );
@@ -196,10 +199,7 @@ exports.toggleStatus = async (req, res, next) => {
 
 exports.getDashboardStats = async (req, res, next) => {
   try {
-    // Filter by org if available, fall back to user for backward compat
-    const baseFilter = req.organization 
-      ? { organization: req.organization._id }
-      : { user: req.user._id };
+    const baseFilter = getBaseFilter(req);
     const userId = req.user._id;
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -307,9 +307,8 @@ exports.getLeadsDashboard = async (req, res, next) => {
       'kitna', 'khareedna', 'lena hai', 'batao', 'chahiye', 'karna hai',
     ];
 
-    const filter = req.organization 
-      ? { organization: req.organization._id }
-      : { user: userId };
+    const baseFilter = getBaseFilter(req);
+    const filter = { ...baseFilter };
     if (platform) filter.platform = platform;
     if (status) filter.status = status;
     if (search) {
@@ -387,7 +386,7 @@ exports.getLeadsDashboard = async (req, res, next) => {
     });
 
     // ── Summary aggregations ──────────────────────────────────────────────────
-    const baseSummaryFilter = req.organization ? { organization: req.organization._id } : { user: userId };
+    const baseSummaryFilter = getBaseFilter(req);
     const [
       platformBreakdown,
       handoffCount,
@@ -427,7 +426,7 @@ exports.getLeadsDashboard = async (req, res, next) => {
 exports.getConversationTemplates = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const conversation = await Conversation.findOne({ _id: id, user: req.user._id })
+    const conversation = await Conversation.findOne({ _id: id, ...getBaseFilter(req) })
       .populate({ path: 'whatsappAccount', select: '+accessToken phoneNumberId wabaId' });
 
     if (!conversation) return next(new AppError('Conversation not found.', 404));
@@ -481,7 +480,7 @@ exports.sendTemplateReply = async (req, res, next) => {
     const { templateName, languageCode, components } = req.body;
     if (!templateName) return next(new AppError('Template name is required.', 400));
 
-    const conversation = await Conversation.findOne({ _id: id, user: req.user._id })
+    const conversation = await Conversation.findOne({ _id: id, ...getBaseFilter(req) })
       .populate({ path: 'whatsappAccount', select: '+accessToken phoneNumberId' });
 
     if (!conversation) return next(new AppError('Conversation not found.', 404));
@@ -546,7 +545,7 @@ exports.createConversationTemplate = async (req, res, next) => {
       return next(new AppError('Template name must contain only lowercase alphanumeric characters and underscores.', 400));
     }
 
-    const conversation = await Conversation.findOne({ _id: id, user: req.user._id })
+    const conversation = await Conversation.findOne({ _id: id, ...getBaseFilter(req) })
       .populate({ path: 'whatsappAccount', select: '+accessToken phoneNumberId wabaId' });
 
     if (!conversation) return next(new AppError('Conversation not found.', 404));

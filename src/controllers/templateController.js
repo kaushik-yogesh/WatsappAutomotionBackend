@@ -7,8 +7,10 @@ const AppError = require('../utils/AppError');
 const { decrypt } = require('../utils/encryption');
 
 // Helper to get connected WhatsApp account with decrypted token
-const getConnectedWAAccount = async (userId) => {
-  const waAccount = await WhatsappAccount.findOne({ user: userId, status: 'connected' }).select('+accessToken');
+const getConnectedWAAccount = async (req) => {
+  const orgId = req.organization?._id || req.user?.currentOrganization;
+  const filter = orgId ? { organization: orgId, status: 'connected' } : { user: req.user.id, status: 'connected' };
+  const waAccount = await WhatsappAccount.findOne(filter).select('+accessToken');
   if (!waAccount) {
     throw new AppError('No connected WhatsApp Business Account found. Please connect your WhatsApp account in Integrations first.', 400);
   }
@@ -96,7 +98,7 @@ exports.getAllTemplates = catchAsync(async (req, res, next) => {
 
 // POST /api/templates/sync - Sync latest status & templates from Meta Graph API
 exports.syncTemplatesFromMeta = catchAsync(async (req, res, next) => {
-  const waAccount = await getConnectedWAAccount(req.user.id);
+  const waAccount = await getConnectedWAAccount(req);
   const waService = new WhatsAppService(decrypt(waAccount.accessToken), waAccount.phoneNumberId);
   
   const metaResponse = await waService.getMessageTemplates(waAccount.wabaId);
@@ -150,7 +152,7 @@ exports.createTemplate = catchAsync(async (req, res, next) => {
 
   const cleanedComponents = sanitizeMetaComponents(components);
 
-  const waAccount = await getConnectedWAAccount(req.user.id);
+  const waAccount = await getConnectedWAAccount(req);
   const waService = new WhatsAppService(decrypt(waAccount.accessToken), waAccount.phoneNumberId);
 
   const metaPayload = {
@@ -203,7 +205,7 @@ exports.cloneSystemTemplate = catchAsync(async (req, res, next) => {
 
   const cleanedComponents = sanitizeMetaComponents(sysTpl.components);
 
-  const waAccount = await getConnectedWAAccount(req.user.id);
+  const waAccount = await getConnectedWAAccount(req);
   const waService = new WhatsAppService(decrypt(waAccount.accessToken), waAccount.phoneNumberId);
 
   const metaPayload = {
@@ -247,7 +249,8 @@ exports.deleteTemplate = catchAsync(async (req, res, next) => {
 
   // Attempt deleting on Meta Graph API if connected
   try {
-    const waAccount = await getConnectedWAAccount(req.user.id);
+    // Get connected account
+    const waAccount = await getConnectedWAAccount(req);
     const waService = new WhatsAppService(decrypt(waAccount.accessToken), waAccount.phoneNumberId);
     await waService.deleteMessageTemplate(waAccount.wabaId, template.name);
   } catch (err) {
