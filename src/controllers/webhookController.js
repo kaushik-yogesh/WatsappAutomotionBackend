@@ -195,6 +195,7 @@ exports.processWebhookPayload = async (payload) => {
 
       // 2. Find active agents for this organization
       const agent = await Agent.findOne({ organization: waAccount.organization, isActive: true }) ||
+                    await Agent.findOne({ whatsappAccounts: waAccount._id, isActive: true }) ||
                     await Agent.findOne({ whatsappAccount: waAccount._id, isActive: true });
       if (!agent) {
         logger.warn(`No active agent found for organization: ${waAccount.organization}`);
