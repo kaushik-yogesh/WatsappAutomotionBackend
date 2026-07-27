@@ -25,7 +25,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'owner', 'admin', 'editor', 'viewer', 'superadmin', 'sales_partner'],
+    enum: ['user', 'owner', 'admin', 'editor', 'viewer', 'developer', 'superadmin', 'sales_partner'],
     default: 'user',
   },
   partnerCode: { type: String, unique: true, sparse: true },

@@ -195,3 +195,45 @@ exports.exportData = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.updateSidebarConfig = async (req, res, next) => {
+  try {
+    const { organizationId } = req.params;
+    const configUpdates = req.body; // e.g. { "/app/deals": false, "/app/contacts": true }
+    
+    const org = await Organization.findOne({
+      _id: organizationId,
+      'members.user': req.user._id
+    });
+
+    if (!org) {
+      return next(new AppError('Organization not found', 404));
+    }
+    
+    // Check if user is owner or admin
+    const member = org.members.find(m => m.user.toString() === req.user._id.toString());
+    if (org.owner.toString() !== req.user._id.toString() && (!member || member.role !== 'admin')) {
+      return next(new AppError('Only organization admins can update sidebar configuration', 403));
+    }
+
+    // Initialize sidebarConfig if it doesn't exist
+    if (!org.sidebarConfig) {
+      org.sidebarConfig = new Map();
+    }
+    
+    // Update config
+    for (const [key, value] of Object.entries(configUpdates)) {
+      org.sidebarConfig.set(key, Boolean(value));
+    }
+    
+    await org.save();
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'Sidebar configuration updated successfully',
+      data: { sidebarConfig: org.sidebarConfig }
+    });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -30,7 +30,7 @@ const organizationSchema = new mongoose.Schema({
     },
     role: {
       type: String,
-      enum: ['owner', 'admin', 'editor', 'viewer'],
+      enum: ['owner', 'admin', 'editor', 'viewer', 'developer'],
       default: 'viewer'
     }
   }],
@@ -47,6 +47,11 @@ const organizationSchema = new mongoose.Schema({
     entryPoint: { type: String }, // IdP Login URL
     issuer: { type: String },     // SP Entity ID
     cert: { type: String }        // IdP Public Cert
+  },
+  sidebarConfig: {
+    type: Map,
+    of: Boolean,
+    default: {}
   }
 }, {
   timestamps: true,
