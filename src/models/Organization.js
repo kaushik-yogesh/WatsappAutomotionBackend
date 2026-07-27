@@ -30,7 +30,7 @@ const organizationSchema = new mongoose.Schema({
     },
     role: {
       type: String,
-      enum: ['owner', 'admin', 'editor', 'viewer', 'developer'],
+      enum: ['owner', 'admin', 'editor', 'viewer'],
       default: 'viewer'
     }
   }],
