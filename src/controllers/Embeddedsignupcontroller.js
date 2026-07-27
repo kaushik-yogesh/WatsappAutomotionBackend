@@ -101,6 +101,25 @@ exports.embeddedSignupCallback = async (req, res, next) => {
           logger.warn('businesses fetch warning:', e3.response?.data?.error?.message || e3.message);
         }
 
+        // 4. Fetch via /debug_token to get granular_scopes target_ids
+        try {
+          const debugRes = await axios.get(`${META_API_BASE}/debug_token`, {
+            params: {
+              input_token: longLivedToken,
+              access_token: `${appId}|${appSecret}`
+            }
+          });
+          const granularScopes = debugRes.data?.data?.granular_scopes || [];
+          const waScope = granularScopes.find(s => s.scope === 'whatsapp_business_management');
+          if (waScope && waScope.target_ids) {
+            for (const targetId of waScope.target_ids) {
+              wabas.push({ id: targetId, name: 'WhatsApp Account (from token scopes)' });
+            }
+          }
+        } catch (e4) {
+          logger.warn('debug_token fetch warning:', e4.response?.data?.error?.message || e4.message);
+        }
+
         // Deduplicate WABAs by ID
         const uniqueWabas = Array.from(new Map(wabas.map(w => [w.id, w])).values());
 
