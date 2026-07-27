@@ -44,7 +44,7 @@ const agentSchema = new mongoose.Schema({
   }],
   platform: {
     type: String,
-    enum: ['whatsapp', 'telegram', 'both', 'instagram', 'facebook', 'all'],
+    enum: ['whatsapp', 'telegram', 'both', 'instagram', 'facebook', 'youtube', 'linkedin', 'all'],
     default: 'whatsapp',
   },
   agentType: {
