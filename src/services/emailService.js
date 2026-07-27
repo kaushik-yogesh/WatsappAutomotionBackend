@@ -174,6 +174,15 @@ const emailTemplates = {
     </div>`,
   }),
 
+  teamInvite: (email, token) => ({
+    subject: 'You have been invited to join a workspace',
+    html: `<div style="font-family:sans-serif;max-width:600px;margin:auto">
+      <h2>Welcome! You've been invited to join a workspace.</h2>
+      <p>To accept the invitation and access your team's workspace, please set up your account password by clicking the button below:</p>
+      <a href="${process.env.FRONTEND_URL}/reset-password?token=${token}" style="background:#25D366;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:10px;">Set Password & Accept Invite</a>
+    </div>`,
+  }),
+
   verifyEmail: (name, token) => ({
     subject: 'Verify your email',
     html: `<div style="font-family:sans-serif;max-width:600px;margin:auto">
