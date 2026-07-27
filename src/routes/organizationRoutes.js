@@ -14,7 +14,6 @@ router.route('/')
 router.post('/switch/:organizationId', organizationController.switchOrganization);
 
 // Protected routes (requires specific roles)
-router.patch('/:organizationId/sidebar', requireRole('admin'), organizationController.updateSidebarConfig);
 router.get('/:organizationId', requireRole('viewer'), organizationController.getOrganizationDetails);
 router.post('/invite', requireRole('admin'), organizationController.inviteMember);
 router.delete('/:organizationId/members/:userId', requireRole('admin'), organizationController.removeMember);

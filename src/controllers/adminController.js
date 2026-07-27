@@ -411,7 +411,20 @@ exports.getPublicSettings = async (req, res, next) => {
       'branding_social_linkedin',
       'branding_social_instagram',
       'branding_social_youtube',
-      'branding_features_json'
+      'branding_features_json',
+      'sidebar_app_dashboard',
+      'sidebar_app_organizations',
+      'sidebar_app_chat',
+      'sidebar_app_contacts',
+      'sidebar_app_campaigns',
+      'sidebar_app_deals',
+      'sidebar_app_tasks',
+      'sidebar_app_social-posts',
+      'sidebar_app_agents',
+      'sidebar_app_integrations',
+      'sidebar_app_analytics',
+      'sidebar_app_settings',
+      'sidebar_app_billing'
     ];
     
     const settings = await SystemSetting.find({ key: { $in: keys } });
@@ -485,7 +498,20 @@ exports.getSystemSettings = async (req, res, next) => {
       { key: 'lang_kn-IN_enabled', value: false, description: 'Kannada' },
       { key: 'lang_ml-IN_enabled', value: false, description: 'Malayalam' },
       { key: 'lang_pa-IN_enabled', value: false, description: 'Punjabi' },
-      { key: 'lang_ur-IN_enabled', value: false, description: 'Urdu' }
+      { key: 'lang_ur-IN_enabled', value: false, description: 'Urdu' },
+      { key: 'sidebar_app_dashboard', value: true, description: 'Show Dashboard in sidebar' },
+      { key: 'sidebar_app_organizations', value: true, description: 'Show Organizations in sidebar' },
+      { key: 'sidebar_app_chat', value: true, description: 'Show Team Inbox in sidebar' },
+      { key: 'sidebar_app_contacts', value: true, description: 'Show Contacts in sidebar' },
+      { key: 'sidebar_app_campaigns', value: true, description: 'Show Campaigns in sidebar' },
+      { key: 'sidebar_app_deals', value: true, description: 'Show Deals Pipeline in sidebar' },
+      { key: 'sidebar_app_tasks', value: true, description: 'Show Tasks in sidebar' },
+      { key: 'sidebar_app_social-posts', value: true, description: 'Show Social Posts in sidebar' },
+      { key: 'sidebar_app_agents', value: true, description: 'Show AI Agents in sidebar' },
+      { key: 'sidebar_app_integrations', value: true, description: 'Show Integrations in sidebar' },
+      { key: 'sidebar_app_analytics', value: true, description: 'Show Analytics in sidebar' },
+      { key: 'sidebar_app_settings', value: true, description: 'Show Settings in sidebar' },
+      { key: 'sidebar_app_billing', value: true, description: 'Show Billing in sidebar' }
     ];
 
     let settings = await SystemSetting.find();
