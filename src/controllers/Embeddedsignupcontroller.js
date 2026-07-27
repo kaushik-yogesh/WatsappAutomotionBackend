@@ -25,15 +25,12 @@ exports.embeddedSignupCallback = async (req, res, next) => {
           return next(new AppError(`App ID Mismatch! Vercel is sending App ID (${frontendAppId}), but Render has META_APP_ID (${appId}). Please set REACT_APP_META_APP_ID on Vercel and META_APP_ID on Render to the exact same Meta App ID.`, 400));
         }
 
-        const redirect_uri = redirectUri || "https://watsapp-automotion.vercel.app/callback";
-
         // Exchange code for access token
         const tokenRes = await axios.get(`${META_API_BASE}/oauth/access_token`, {
             params: {
                 client_id: appId,
                 client_secret: appSecret,
                 code,
-                redirect_uri
             },
         });
 
